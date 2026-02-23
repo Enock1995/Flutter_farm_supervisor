@@ -454,6 +454,10 @@ class _ModuleGrid extends StatelessWidget {
     Navigator.pushNamed(context, '/crops');
   } else if (index == 1) {
     Navigator.pushNamed(context, '/livestock');
+  } else if (index == 2) {
+    Navigator.pushNamed(context, '/weather');
+  } else if (index == 3) {
+    Navigator.pushNamed(context, '/finances');
   } else {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

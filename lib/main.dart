@@ -9,6 +9,7 @@ import 'providers/auth_provider.dart';
 import 'providers/farm_profile_provider.dart';
 import 'providers/crop_provider.dart';
 import 'providers/livestock_provider.dart';
+import 'providers/finance_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/registration_screen.dart';
@@ -16,6 +17,8 @@ import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/farm_profile/farm_profile_setup_screen.dart';
 import 'screens/crops/crop_management_screen.dart';
 import 'screens/livestock/livestock_screen.dart';
+import 'screens/weather/weather_screen.dart';
+import 'screens/finances/finance_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +54,7 @@ class AgricAssistApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FarmProfileProvider()),
         ChangeNotifierProvider(create: (_) => CropProvider()),
         ChangeNotifierProvider(create: (_) => LivestockProvider()),
+        ChangeNotifierProvider(create: (_) => FinanceProvider()),
       ],
       child: MaterialApp(
         title: AppConstants.appName,
@@ -65,6 +69,8 @@ class AgricAssistApp extends StatelessWidget {
           '/dashboard':    (context) => const DashboardScreen(),
           '/crops':        (context) => const CropManagementScreen(),
           '/livestock':    (context) => const LivestockScreen(),
+          '/weather':      (context) => const WeatherScreen(),
+          '/finances':     (context) => const FinanceScreen(),
         },
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const LoginScreen(),

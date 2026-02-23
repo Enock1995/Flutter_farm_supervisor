@@ -135,6 +135,20 @@ class DatabaseService {
         FOREIGN KEY (user_id) REFERENCES users (user_id)
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS finance_transactions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        category TEXT NOT NULL,
+        description TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        crop_or_animal TEXT,
+        notes TEXT
+      )
+    ''');
   }
 
   // ===========================================================================
