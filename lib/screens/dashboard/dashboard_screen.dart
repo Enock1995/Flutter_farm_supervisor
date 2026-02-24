@@ -449,7 +449,7 @@ class _ModuleGrid extends StatelessWidget {
         final m = modules[index];
         final color = m['color'] as Color;
         return GestureDetector(
-          onTap: () {
+         onTap: () {
   if (index == 0) {
     Navigator.pushNamed(context, '/crops');
   } else if (index == 1) {
@@ -458,7 +458,11 @@ class _ModuleGrid extends StatelessWidget {
     Navigator.pushNamed(context, '/weather');
   } else if (index == 3) {
     Navigator.pushNamed(context, '/finances');
-  } else {
+  } else if (index == 4) {
+    Navigator.pushNamed(context, '/horticulture');
+  }  else if (index == 5) {
+  Navigator.pushNamed(context, '/knowledge-base');
+} else {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${m['label']} — coming soon!'),

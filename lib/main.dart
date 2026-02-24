@@ -10,6 +10,7 @@ import 'providers/farm_profile_provider.dart';
 import 'providers/crop_provider.dart';
 import 'providers/livestock_provider.dart';
 import 'providers/finance_provider.dart';
+import 'providers/horticulture_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/registration_screen.dart';
@@ -19,6 +20,8 @@ import 'screens/crops/crop_management_screen.dart';
 import 'screens/livestock/livestock_screen.dart';
 import 'screens/weather/weather_screen.dart';
 import 'screens/finances/finance_screen.dart';
+import 'screens/horticulture/horticulture_screen.dart';
+import 'screens/knowledge_base/knowledge_base_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +58,7 @@ class AgricAssistApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CropProvider()),
         ChangeNotifierProvider(create: (_) => LivestockProvider()),
         ChangeNotifierProvider(create: (_) => FinanceProvider()),
+        ChangeNotifierProvider(create: (_) => HorticultureProvider()),
       ],
       child: MaterialApp(
         title: AppConstants.appName,
@@ -62,15 +66,17 @@ class AgricAssistApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         initialRoute: '/',
         routes: {
-          '/':             (context) => const SplashScreen(),
-          '/login':        (context) => const LoginScreen(),
-          '/register':     (context) => const RegistrationScreen(),
-          '/farm-profile': (context) => const FarmProfileSetupScreen(),
-          '/dashboard':    (context) => const DashboardScreen(),
-          '/crops':        (context) => const CropManagementScreen(),
-          '/livestock':    (context) => const LivestockScreen(),
-          '/weather':      (context) => const WeatherScreen(),
-          '/finances':     (context) => const FinanceScreen(),
+          '/':              (context) => const SplashScreen(),
+          '/login':         (context) => const LoginScreen(),
+          '/register':      (context) => const RegistrationScreen(),
+          '/farm-profile':  (context) => const FarmProfileSetupScreen(),
+          '/dashboard':     (context) => const DashboardScreen(),
+          '/crops':         (context) => const CropManagementScreen(),
+          '/livestock':     (context) => const LivestockScreen(),
+          '/weather':       (context) => const WeatherScreen(),
+          '/finances':      (context) => const FinanceScreen(),
+          '/horticulture':  (context) => const HorticultureScreen(),
+          '/knowledge-base': (context) => const KnowledgeBaseScreen(),
         },
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const LoginScreen(),
