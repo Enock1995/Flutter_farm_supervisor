@@ -1,39 +1,894 @@
 // lib/screens/weather/weather_screen.dart
+// Developed by Sir Enocks — Cor Technologies
+// Real-time weather via OpenWeatherMap + farm advisory engine
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../constants/app_theme.dart';
-import '../../constants/zimbabwe_districts.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/weather_provider.dart';
+import '../../services/weather_service.dart';
 
-class WeatherScreen extends StatelessWidget {
+class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
-    final region = user?.agroRegion ?? 'IIa';
-    final district = user?.district ?? 'Harare';
-    final currentMonth = DateTime.now().month;
+  State<WeatherScreen> createState() => _WeatherScreenState();
+}
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Weather & Climate')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+class _WeatherScreenState extends State<WeatherScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = context.read<AuthProvider>().user;
+      context.read<WeatherProvider>().init(
+            userDistrict: user?.district ?? '',
+          );
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<WeatherProvider>(
+      builder: (context, provider, _) {
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: NestedScrollView(
+            headerSliverBuilder: (context, _) => [
+              SliverAppBar(
+                expandedHeight: 200,
+                pinned: true,
+                backgroundColor: _skyColor(
+                    provider.current?.condition ?? ''),
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back,
+                      color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.location_city,
+                        color: Colors.white),
+                    tooltip: 'Change city',
+                    onPressed: () =>
+                        _showCityPicker(context, provider),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh,
+                        color: Colors.white),
+                    tooltip: 'Refresh',
+                    onPressed: provider.isLoading
+                        ? null
+                        : () => provider.loadWeather(
+                            forceRefresh: true),
+                  ),
+                ],
+                flexibleSpace: FlexibleSpaceBar(
+                  background: _WeatherHero(
+                      provider: provider),
+                ),
+                bottom: TabBar(
+                  controller: _tabController,
+                  indicatorColor: Colors.white,
+                  labelColor: Colors.white,
+                  unselectedLabelColor:
+                      Colors.white54,
+                  tabs: const [
+                    Tab(text: 'Current'),
+                    Tab(text: '5-Day Forecast'),
+                    Tab(text: 'Farm Advisory'),
+                  ],
+                ),
+              ),
+            ],
+            body: provider.isLoading && !provider.hasData
+                ? _LoadingView()
+                : !provider.hasData
+                    ? _ErrorView(
+                        error: provider.error,
+                        onRetry: () => provider
+                            .loadWeather(forceRefresh: true),
+                      )
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _CurrentTab(
+                              provider: provider),
+                          _ForecastTab(
+                              forecast: provider.forecast),
+                          _AdvisoryTab(
+                              advisories:
+                                  provider.advisories),
+                        ],
+                      ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CITY PICKER
+  // ---------------------------------------------------------------------------
+  void _showCityPicker(
+      BuildContext context, WeatherProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CityPickerSheet(
+        currentCity: provider.city,
+        onSelected: (city) {
+          Navigator.pop(context);
+          provider.changeCity(city);
+        },
+      ),
+    );
+  }
+
+  Color _skyColor(String condition) {
+    switch (condition.toLowerCase()) {
+      case 'clear':
+        return const Color(0xFF1565C0);
+      case 'clouds':
+        return const Color(0xFF546E7A);
+      case 'rain':
+      case 'drizzle':
+        return const Color(0xFF37474F);
+      case 'thunderstorm':
+        return const Color(0xFF263238);
+      case 'snow':
+        return const Color(0xFF78909C);
+      default:
+        return AppColors.primaryDark;
+    }
+  }
+}
+
+// =============================================================================
+// HERO HEADER
+// =============================================================================
+class _WeatherHero extends StatelessWidget {
+  final WeatherProvider provider;
+  const _WeatherHero({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final w = provider.current;
+    final bgColor = _skyBg(w?.condition ?? '');
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [bgColor, bgColor.withOpacity(0.75)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding:
+              const EdgeInsets.fromLTRB(20, 50, 20, 0),
+          child: w == null
+              ? const Center(
+                  child: Text('Loading…',
+                      style: TextStyle(
+                          color: Colors.white)))
+              : Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.center,
+                  children: [
+                    // Weather icon + temp
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        mainAxisAlignment:
+                            MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _conditionEmoji(
+                                    w.condition),
+                                style: const TextStyle(
+                                    fontSize: 46),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                w.tempDisplay,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 48,
+                                  fontWeight:
+                                      FontWeight.w300,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            _capitalize(w.description),
+                            style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                  Icons.location_on,
+                                  color: Colors.white60,
+                                  size: 14),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${w.cityName}, ${w.country}',
+                                style: const TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Cache badge
+                    if (w.isFromCache)
+                      Container(
+                        padding:
+                            const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius:
+                              BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cloud_off,
+                                size: 12,
+                                color: Colors.white70),
+                            SizedBox(width: 4),
+                            Text('Cached',
+                                style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  Color _skyBg(String condition) {
+    switch (condition.toLowerCase()) {
+      case 'clear':
+        return const Color(0xFF1565C0);
+      case 'clouds':
+        return const Color(0xFF546E7A);
+      case 'rain':
+      case 'drizzle':
+        return const Color(0xFF37474F);
+      case 'thunderstorm':
+        return const Color(0xFF263238);
+      default:
+        return AppColors.primaryDark;
+    }
+  }
+}
+
+// =============================================================================
+// TAB 1 — CURRENT WEATHER
+// =============================================================================
+class _CurrentTab extends StatelessWidget {
+  final WeatherProvider provider;
+  const _CurrentTab({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final w = provider.current!;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cache / refresh notice
+          if (provider.isFromCache || provider.error != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: AppColors.warning.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      color: AppColors.warning, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      provider.error ??
+                          'Showing cached data from ${_fmtTime(w.fetchedAt)}',
+                      style: AppTextStyles.caption.copyWith(
+                          color: AppColors.warning),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Stats grid
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics:
+                const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.6,
+            children: [
+              _StatCard(
+                icon: '🌡️',
+                label: 'Feels Like',
+                value: w.feelsLikeDisplay,
+                sub:
+                    'Min ${w.tempMinC.round()}° / Max ${w.tempMaxC.round()}°',
+              ),
+              _StatCard(
+                icon: '💧',
+                label: 'Humidity',
+                value: '${w.humidity}%',
+                sub: w.humidity > 80
+                    ? 'High — disease risk'
+                    : w.humidity < 30
+                        ? 'Very dry'
+                        : 'Comfortable',
+              ),
+              _StatCard(
+                icon: '💨',
+                label: 'Wind',
+                value:
+                    '${w.windSpeedKmh.toStringAsFixed(1)} km/h',
+                sub: w.windDirection,
+              ),
+              _StatCard(
+                icon: '☁️',
+                label: 'Cloud Cover',
+                value: '${w.cloudiness}%',
+                sub: w.rainMm1h != null
+                    ? 'Rain: ${w.rainMm1h!.toStringAsFixed(1)} mm/h'
+                    : 'No rain',
+              ),
+              _StatCard(
+                icon: '🔽',
+                label: 'Pressure',
+                value: '${w.pressure} hPa',
+                sub: w.pressure > 1013
+                    ? 'High — stable'
+                    : 'Low — changeable',
+              ),
+              _StatCard(
+                icon: '👁️',
+                label: 'Visibility',
+                value: w.visibility >= 1000
+                    ? '${(w.visibility / 1000).toStringAsFixed(1)} km'
+                    : '${w.visibility} m',
+                sub: w.visibility > 5000
+                    ? 'Clear'
+                    : 'Reduced',
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Sunrise / Sunset
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: AppColors.divider),
+            ),
+            child: Row(
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceAround,
+              children: [
+                _SunTime(
+                    icon: '🌅',
+                    label: 'Sunrise',
+                    time: _fmtTime(w.sunrise)),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: AppColors.divider,
+                ),
+                _SunTime(
+                    icon: '🌇',
+                    label: 'Sunset',
+                    time: _fmtTime(w.sunset)),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: AppColors.divider,
+                ),
+                _SunTime(
+                    icon: '⏱️',
+                    label: 'Daylight',
+                    time: _daylightHours(
+                        w.sunrise, w.sunset)),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Last updated
+          Center(
+            child: Text(
+              'Last updated: ${_fmtDateTime(w.fetchedAt)}',
+              style: AppTextStyles.caption
+                  .copyWith(color: AppColors.textHint),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  String _fmtTime(DateTime d) {
+    final h = d.hour.toString().padLeft(2, '0');
+    final m = d.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  String _fmtDateTime(DateTime d) {
+    const months = [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${d.day} ${months[d.month]}, ${_fmtTime(d)}';
+  }
+
+  String _daylightHours(DateTime rise, DateTime set) {
+    final diff = set.difference(rise);
+    final h = diff.inHours;
+    final m = diff.inMinutes % 60;
+    return '${h}h ${m}m';
+  }
+}
+
+// =============================================================================
+// TAB 2 — 5-DAY FORECAST
+// =============================================================================
+class _ForecastTab extends StatelessWidget {
+  final List<ForecastDay> forecast;
+  const _ForecastTab({required this.forecast});
+
+  @override
+  Widget build(BuildContext context) {
+    if (forecast.isEmpty) {
+      return const Center(
+        child: Text('No forecast data available.'),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('5-Day Forecast',
+            style: AppTextStyles.heading3),
+        const SizedBox(height: 12),
+        ...forecast.map((day) => _ForecastCard(day: day)),
+        const SizedBox(height: 20),
+
+        // Forecast tips
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: AppColors.primary.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('📅 Planning Your Week',
+                  style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              ..._getWeeklyTips(forecast).map(
+                (tip) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      const Text('• ',
+                          style: TextStyle(
+                              color: AppColors.primary)),
+                      Expanded(
+                          child: Text(tip,
+                              style:
+                                  AppTextStyles.bodySmall)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  List<String> _getWeeklyTips(List<ForecastDay> days) {
+    final tips = <String>[];
+    final rainyDays = days
+        .where((d) =>
+            d.condition.toLowerCase() == 'rain' ||
+            d.condition.toLowerCase() == 'thunderstorm')
+        .toList();
+    final dryDays = days
+        .where((d) =>
+            d.condition.toLowerCase() == 'clear' &&
+            d.windSpeedMs * 3.6 < 15)
+        .toList();
+
+    if (rainyDays.isNotEmpty) {
+      final names = rainyDays.map((d) => d.dayName).join(', ');
+      tips.add(
+          'Rain expected on $names — avoid spraying on these days.');
+    }
+    if (dryDays.isNotEmpty) {
+      final names = dryDays.map((d) => d.dayName).join(', ');
+      tips.add(
+          '$names look good for pesticide/fungicide applications.');
+    }
+
+    final hotDays =
+        days.where((d) => d.tempMaxC > 32).toList();
+    if (hotDays.isNotEmpty) {
+      tips.add(
+          'High temperatures forecast — irrigate early morning on hot days.');
+    }
+    if (tips.isEmpty) {
+      tips.add(
+          'Conditions look stable this week — good for general farm work.');
+    }
+    return tips;
+  }
+}
+
+class _ForecastCard extends StatelessWidget {
+  final ForecastDay day;
+  const _ForecastCard({required this.day});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasRain =
+        day.rainMm > 0 || day.rainChance > 20;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: hasRain
+              ? AppColors.info.withOpacity(0.3)
+              : AppColors.divider,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Day name
+          SizedBox(
+            width: 40,
+            child: Text(
+              day.dayName,
+              style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w700),
+            ),
+          ),
+          // Icon
+          Text(_conditionEmoji(day.condition),
+              style: const TextStyle(fontSize: 26)),
+          const SizedBox(width: 10),
+          // Description
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(_capitalize(day.description),
+                    style: AppTextStyles.body),
+                Row(
+                  children: [
+                    Icon(Icons.water_drop,
+                        size: 12,
+                        color: hasRain
+                            ? AppColors.info
+                            : AppColors.textHint),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${day.rainChance}%  •  ${day.humidity}% humidity',
+                      style: AppTextStyles.caption
+                          .copyWith(
+                        color: hasRain
+                            ? AppColors.info
+                            : AppColors.textHint,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Temp range
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${day.tempMaxC.round()}°',
+                style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryDark),
+              ),
+              Text(
+                '${day.tempMinC.round()}°',
+                style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.textHint),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// TAB 3 — FARM ADVISORY
+// =============================================================================
+class _AdvisoryTab extends StatelessWidget {
+  final List<FarmAdvisory> advisories;
+  const _AdvisoryTab({required this.advisories});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Farm Advisory',
+            style: AppTextStyles.heading3),
+        const SizedBox(height: 4),
+        Text(
+          'Real-time recommendations based on current weather conditions.',
+          style: AppTextStyles.bodySmall
+              .copyWith(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 14),
+        ...advisories.map(
+            (a) => _AdvisoryCard(advisory: a)),
+        const SizedBox(height: 30),
+      ],
+    );
+  }
+}
+
+class _AdvisoryCard extends StatelessWidget {
+  final FarmAdvisory advisory;
+  const _AdvisoryCard({required this.advisory});
+
+  Color get _bgColor {
+    switch (advisory.color) {
+      case 'success':
+        return AppColors.success.withOpacity(0.08);
+      case 'warning':
+        return AppColors.warning.withOpacity(0.08);
+      case 'error':
+        return AppColors.error.withOpacity(0.08);
+      default:
+        return AppColors.info.withOpacity(0.08);
+    }
+  }
+
+  Color get _borderColor {
+    switch (advisory.color) {
+      case 'success':
+        return AppColors.success.withOpacity(0.35);
+      case 'warning':
+        return AppColors.warning.withOpacity(0.35);
+      case 'error':
+        return AppColors.error.withOpacity(0.35);
+      default:
+        return AppColors.info.withOpacity(0.35);
+    }
+  }
+
+  Color get _titleColor {
+    switch (advisory.color) {
+      case 'success':
+        return AppColors.success;
+      case 'warning':
+        return AppColors.warning;
+      case 'error':
+        return AppColors.error;
+      default:
+        return AppColors.info;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _bgColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(advisory.icon,
+              style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  advisory.title,
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: _titleColor,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(advisory.body,
+                    style: AppTextStyles.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// CITY PICKER SHEET
+// =============================================================================
+class _CityPickerSheet extends StatefulWidget {
+  final String currentCity;
+  final ValueChanged<String> onSelected;
+  const _CityPickerSheet(
+      {required this.currentCity,
+      required this.onSelected});
+
+  @override
+  State<_CityPickerSheet> createState() =>
+      _CityPickerSheetState();
+}
+
+class _CityPickerSheetState
+    extends State<_CityPickerSheet> {
+  String _search = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = WeatherService.zimbabweCities
+        .where((c) =>
+            c.toLowerCase().contains(_search.toLowerCase()))
+        .toList();
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      builder: (_, controller) => Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _CurrentConditionsCard(
-                district: district, region: region),
+            // Handle
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const SizedBox(height: 16),
-            _SeasonCard(
-                region: region, month: currentMonth),
-            const SizedBox(height: 16),
-            _MonthlyCalendarCard(region: region),
-            const SizedBox(height: 16),
-            _FarmingAdviceCard(
-                region: region, month: currentMonth),
-            const SizedBox(height: 30),
+            Text('Select City',
+                style: AppTextStyles.heading3),
+            const SizedBox(height: 12),
+            TextField(
+              onChanged: (v) =>
+                  setState(() => _search = v),
+              decoration: InputDecoration(
+                hintText: 'Search Zimbabwe city…',
+                prefixIcon: const Icon(Icons.search,
+                    color: AppColors.primaryLight),
+                filled: true,
+                fillColor: AppColors.background,
+                border: OutlineInputBorder(
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.builder(
+                controller: controller,
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final city = filtered[i];
+                  final isCurrent =
+                      city == widget.currentCity;
+                  return ListTile(
+                    leading: Icon(
+                      Icons.location_city,
+                      color: isCurrent
+                          ? AppColors.primaryLight
+                          : AppColors.textHint,
+                    ),
+                    title: Text(city,
+                        style: AppTextStyles.body
+                            .copyWith(
+                          fontWeight: isCurrent
+                              ? FontWeight.w700
+                              : FontWeight.w400,
+                          color: isCurrent
+                              ? AppColors.primaryLight
+                              : AppColors.textPrimary,
+                        )),
+                    trailing: isCurrent
+                        ? const Icon(Icons.check,
+                            color:
+                                AppColors.primaryLight)
+                        : null,
+                    onTap: () =>
+                        widget.onSelected(city),
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -41,335 +896,66 @@ class WeatherScreen extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// CURRENT CONDITIONS CARD
-// ---------------------------------------------------------------------------
-class _CurrentConditionsCard extends StatelessWidget {
-  final String district;
-  final String region;
-  const _CurrentConditionsCard(
-      {required this.district, required this.region});
+// =============================================================================
+// SHARED WIDGETS
+// =============================================================================
 
-  @override
-  Widget build(BuildContext context) {
-    final month = DateTime.now().month;
-    final isRainy = month >= 10 || month <= 4;
-    final isDry = month >= 5 && month <= 9;
-    final isPeak = month == 12 || month == 1 || month == 2;
-
-    String condition;
-    String tempRange;
-    String icon;
-    Color bgColor;
-
-    if (isPeak) {
-      condition = 'Hot & Wet Season';
-      tempRange = '22–35°C';
-      icon = '⛈️';
-      bgColor = const Color(0xFF1565C0);
-    } else if (isRainy) {
-      condition = 'Rainy Season';
-      tempRange = '18–30°C';
-      icon = '🌧️';
-      bgColor = const Color(0xFF1976D2);
-    } else if (month == 5 || month == 6) {
-      condition = 'Cool Dry Season';
-      tempRange = '8–22°C';
-      icon = '🌤️';
-      bgColor = const Color(0xFF0288D1);
-    } else if (month == 7 || month == 8) {
-      condition = 'Cold Dry Season';
-      tempRange = '4–20°C';
-      icon = '🌬️';
-      bgColor = const Color(0xFF01579B);
-    } else {
-      condition = 'Hot Dry Season';
-      tempRange = '20–35°C';
-      icon = '☀️';
-      bgColor = const Color(0xFFE65100);
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [bgColor, bgColor.withOpacity(0.7)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment:
-                MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(district,
-                      style: AppTextStyles.heading2
-                          .copyWith(color: Colors.white)),
-                  Text('Region $region',
-                      style: AppTextStyles.bodySmall
-                          .copyWith(color: Colors.white70)),
-                ],
-              ),
-              Text(icon,
-                  style: const TextStyle(fontSize: 52)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            tempRange,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 40,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'Poppins',
-            ),
-          ),
-          Text(condition,
-              style: AppTextStyles.heading3
-                  .copyWith(color: Colors.white)),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _WeatherStat(
-                  icon: '💧',
-                  label: 'Season',
-                  value: _seasonName(month)),
-              const SizedBox(width: 16),
-              _WeatherStat(
-                  icon: '🌱',
-                  label: 'Farming',
-                  value: _farmingStatus(month)),
-              const SizedBox(width: 16),
-              _WeatherStat(
-                  icon: '☔',
-                  label: 'Rain',
-                  value: _rainStatus(month, region)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline,
-                    color: Colors.white70, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Live weather unavailable offline. Showing seasonal averages for your region.',
-                    style: AppTextStyles.caption
-                        .copyWith(color: Colors.white70),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _seasonName(int m) {
-    if (m >= 10 || m <= 4) return 'Rainy';
-    if (m >= 5 && m <= 8) return 'Dry';
-    return 'Late Dry';
-  }
-
-  String _farmingStatus(int m) {
-    if (m == 10 || m == 11) return 'Plant Now';
-    if (m >= 12 || m <= 3) return 'Growing';
-    if (m == 4 || m == 5) return 'Harvest';
-    return 'Land Prep';
-  }
-
-  String _rainStatus(int m, String region) {
-    if (m >= 11 && m <= 3) {
-      return region == 'I' || region == 'IIa'
-          ? 'Good'
-          : 'Moderate';
-    }
-    if (m >= 10) return 'Starting';
-    return 'None';
-  }
-}
-
-class _WeatherStat extends StatelessWidget {
+class _StatCard extends StatelessWidget {
   final String icon;
   final String label;
   final String value;
-  const _WeatherStat(
-      {required this.icon,
-      required this.label,
-      required this.value});
+  final String sub;
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.sub,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        children: [
-          Text(icon,
-              style: const TextStyle(fontSize: 18)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: AppTextStyles.body
-                  .copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700)),
-          Text(label,
-              style: AppTextStyles.caption
-                  .copyWith(color: Colors.white70)),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// SEASON CARD
-// ---------------------------------------------------------------------------
-class _SeasonCard extends StatelessWidget {
-  final String region;
-  final int month;
-  const _SeasonCard(
-      {required this.region, required this.month});
-
-  @override
-  Widget build(BuildContext context) {
-    final info = _getSeasonInfo(region, month);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [
-              const Icon(Icons.wb_sunny_outlined,
-                  color: AppColors.accent),
-              const SizedBox(width: 8),
-              Text('Season Overview',
-                  style: AppTextStyles.heading3),
+              Text(icon,
+                  style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary)),
             ],
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                  child: _SeasonStat(
-                      label: 'Rainfall',
-                      value: info['rainfall']!,
-                      icon: '🌧️')),
-              Expanded(
-                  child: _SeasonStat(
-                      label: 'Humidity',
-                      value: info['humidity']!,
-                      icon: '💦')),
-              Expanded(
-                  child: _SeasonStat(
-                      label: 'Wind',
-                      value: info['wind']!,
-                      icon: '💨')),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              info['advice']!,
-              style: AppTextStyles.body,
-            ),
-          ),
+          const SizedBox(height: 6),
+          Text(value,
+              style: AppTextStyles.heading3.copyWith(
+                  color: AppColors.primaryDark)),
+          Text(sub,
+              style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textHint)),
         ],
       ),
     );
   }
-
-  Map<String, String> _getSeasonInfo(
-      String region, int month) {
-    // Rainy season
-    if (month >= 11 && month <= 3) {
-      final rainfall = region == 'I'
-          ? '150–200mm/month'
-          : region == 'IIa' || region == 'IIb'
-              ? '100–150mm/month'
-              : region == 'III'
-                  ? '75–100mm/month'
-                  : '50–75mm/month';
-      return {
-        'rainfall': rainfall,
-        'humidity': '70–85%',
-        'wind': 'Light–Moderate',
-        'advice':
-            '🌱 Peak growing season. Ensure timely planting, weeding, and pest scouting. Monitor for fungal diseases in humid conditions.',
-      };
-    }
-    // Post-rainy / harvest (April–May)
-    if (month == 4 || month == 5) {
-      return {
-        'rainfall': '20–60mm/month',
-        'humidity': '50–65%',
-        'wind': 'Moderate',
-        'advice':
-            '🌾 Harvest season. Dry grain and produce quickly to avoid post-harvest losses. Start land preparation for next season.',
-      };
-    }
-    // Cold dry (June–August)
-    if (month >= 6 && month <= 8) {
-      return {
-        'rainfall': '0–5mm/month',
-        'humidity': '30–45%',
-        'wind': 'Strong & Cold',
-        'advice':
-            '❄️ Cold dry season. Good time for wheat in high regions. Protect livestock from cold. Maintain water sources for animals.',
-      };
-    }
-    // Hot dry (September–October)
-    return {
-      'rainfall': '5–30mm/month',
-      'humidity': '25–40%',
-      'wind': 'Hot & Dry',
-      'advice':
-          '🔥 Hot dry season. Prepare land for planting. Vaccinate livestock before rains. Water is critical — check all sources.',
-    };
-  }
 }
 
-class _SeasonStat extends StatelessWidget {
-  final String label;
-  final String value;
+class _SunTime extends StatelessWidget {
   final String icon;
-  const _SeasonStat(
-      {required this.label,
-      required this.value,
-      required this.icon});
+  final String label;
+  final String time;
+  const _SunTime(
+      {required this.icon,
+      required this.label,
+      required this.time});
 
   @override
   Widget build(BuildContext context) {
@@ -377,351 +963,96 @@ class _SeasonStat extends StatelessWidget {
       children: [
         Text(icon, style: const TextStyle(fontSize: 22)),
         const SizedBox(height: 4),
-        Text(value,
-            style: AppTextStyles.bodySmall.copyWith(
-                fontWeight: FontWeight.w700),
-            textAlign: TextAlign.center),
+        Text(time,
+            style: AppTextStyles.body
+                .copyWith(fontWeight: FontWeight.w700)),
         Text(label,
-            style: AppTextStyles.caption,
-            textAlign: TextAlign.center),
+            style: AppTextStyles.caption
+                .copyWith(color: AppColors.textHint)),
       ],
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// MONTHLY RAINFALL CALENDAR
-// ---------------------------------------------------------------------------
-class _MonthlyCalendarCard extends StatelessWidget {
-  final String region;
-  const _MonthlyCalendarCard({required this.region});
-
-  // Average monthly rainfall mm per region
-  static const Map<String, List<int>> _rainfall = {
-    'I':   [200, 180, 120, 50, 10, 2, 1, 2, 10, 50, 120, 180],
-    'IIa': [170, 150, 100, 40, 8, 1, 1, 1, 8, 40, 100, 150],
-    'IIb': [150, 130, 90, 35, 6, 1, 0, 1, 7, 35, 90, 130],
-    'III': [110, 100, 70, 25, 4, 0, 0, 0, 5, 25, 70, 100],
-    'IV':  [75, 65, 50, 15, 2, 0, 0, 0, 3, 15, 50, 65],
-    'V':   [50, 45, 35, 10, 1, 0, 0, 0, 2, 10, 35, 45],
-  };
-
+class _LoadingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final data = _rainfall[region] ??
-        _rainfall['IIa']!;
-    final currentMonth = DateTime.now().month;
-    final maxRain =
-        data.reduce((a, b) => a > b ? a : b).toDouble();
-
-    const months = [
-      'J', 'F', 'M', 'A', 'M', 'J',
-      'J', 'A', 'S', 'O', 'N', 'D'
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
+    return const Center(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.bar_chart,
-                  color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text('Monthly Rainfall — Region $region',
-                  style: AppTextStyles.heading3),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: List.generate(12, (i) {
-              final isNow = (i + 1) == currentMonth;
-              final height = maxRain > 0
-                  ? (data[i] / maxRain * 80).clamp(4.0, 80.0)
-                  : 4.0;
-
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 2),
-                  child: Column(
-                    mainAxisAlignment:
-                        MainAxisAlignment.end,
-                    children: [
-                      if (isNow)
-                        Container(
-                          width: 4,
-                          height: 4,
-                          decoration: const BoxDecoration(
-                            color: AppColors.accent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      const SizedBox(height: 2),
-                      AnimatedContainer(
-                        duration: Duration(
-                            milliseconds: 300 + i * 50),
-                        height: height,
-                        decoration: BoxDecoration(
-                          color: isNow
-                              ? AppColors.accent
-                              : data[i] > 50
-                                  ? AppColors.primary
-                                  : data[i] > 10
-                                      ? AppColors
-                                          .primaryLight
-                                          .withOpacity(0.6)
-                                      : AppColors.divider,
-                          borderRadius:
-                              BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(months[i],
-                          style:
-                              AppTextStyles.caption.copyWith(
-                            fontWeight: isNow
-                                ? FontWeight.w700
-                                : FontWeight.w400,
-                            color: isNow
-                                ? AppColors.accent
-                                : AppColors.textSecondary,
-                          )),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _Legend(
-                  color: AppColors.primary,
-                  label: 'High (>50mm)'),
-              const SizedBox(width: 12),
-              _Legend(
-                  color:
-                      AppColors.primaryLight.withOpacity(0.6),
-                  label: 'Low (10–50mm)'),
-              const SizedBox(width: 12),
-              _Legend(
-                  color: AppColors.accent,
-                  label: 'Now'),
-            ],
-          ),
+          CircularProgressIndicator(
+              color: AppColors.primaryLight),
+          SizedBox(height: 16),
+          Text('Fetching weather data…'),
         ],
       ),
     );
   }
 }
 
-class _Legend extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _Legend({required this.color, required this.label});
+class _ErrorView extends StatelessWidget {
+  final String? error;
+  final VoidCallback onRetry;
+  const _ErrorView(
+      {required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(2))),
-        const SizedBox(width: 4),
-        Text(label, style: AppTextStyles.caption),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// FARMING ADVICE CARD
-// ---------------------------------------------------------------------------
-class _FarmingAdviceCard extends StatelessWidget {
-  final String region;
-  final int month;
-  const _FarmingAdviceCard(
-      {required this.region, required this.month});
-
-  static const Map<int, Map<String, String>> _advice = {
-    1: {
-      'title': 'January — Peak Rainy Season 🌧️',
-      'crop': 'Top-dress maize. Scout intensively for Fall Armyworm. Apply fungicide for grey leaf spot.',
-      'livestock': 'Tick dipping every week. Watch for East Coast Fever. Keep cattle in dry areas.',
-      'general': 'Roads may flood — plan input delivery early. Store critical medications on farm.',
-    },
-    2: {
-      'title': 'February — Late Rains 🌿',
-      'crop': 'Monitor crop for stalk borer. Maize at silking — no spray. Scout for diseases.',
-      'livestock': 'Continue weekly dipping. Treat any sick animals promptly.',
-      'general': 'Start planning marketing — assess crop yield. Check grain storage facilities.',
-    },
-    3: {
-      'title': 'March — Rains Ending 🌦️',
-      'crop': 'Assess crop maturity. Begin early harvesting where possible. Watch for aflatoxin risk.',
-      'livestock': 'Check body condition scores — supplement thin animals.',
-      'general': 'Order drying and storage materials. Contact grain buyers early.',
-    },
-    4: {
-      'title': 'April — Harvest Season 🌾',
-      'crop': 'Harvest maize, groundnuts, soybeans. Dry grain to 12–13% before storage.',
-      'livestock': 'Vaccinate for Enterotoxaemia (goats/sheep). FMD vaccination due.',
-      'general': 'Keep harvested grain off the ground. Use certified storage bags.',
-    },
-    5: {
-      'title': 'May — Post-Harvest 🚜',
-      'crop': 'Plant wheat (Regions I, IIa). Prepare land for next season. Plow in crop residues.',
-      'livestock': 'Begin dry-season feeding program. Check water points.',
-      'general': 'Record season results. Budget for next season inputs.',
-    },
-    6: {
-      'title': 'June — Cold Season ❄️',
-      'crop': 'Manage wheat — weed and fertilize. Irrigate winter crops.',
-      'livestock': 'Protect young animals from cold nights. Provide extra feed.',
-      'general': 'Service farm equipment. Repair fencing and storage facilities.',
-    },
-    7: {
-      'title': 'July — Mid Winter ❄️',
-      'crop': 'Monitor wheat for rust diseases. Apply fungicide if needed.',
-      'livestock': 'Deworming season — dose all small stock. Continue body condition monitoring.',
-      'general': 'Order inputs for next rainy season. Attend farm training days.',
-    },
-    8: {
-      'title': 'August — Late Winter 🌬️',
-      'crop': 'Plan crop varieties for next season. Order certified seed and fertilizer.',
-      'livestock': 'Begin vaccinating for anthrax and blackleg before rains.',
-      'general': 'Start land preparation — deep plough now for better moisture retention.',
-    },
-    9: {
-      'title': 'September — Pre-season 🌡️',
-      'crop': 'Land preparation in full swing. Apply lime if needed.',
-      'livestock': 'Complete all pre-season vaccinations. FMD due. Service dip tanks.',
-      'general': 'Confirm seed, fertilizer, and chemical orders. Check irrigation.',
-    },
-    10: {
-      'title': 'October — Planting Season Begins 🌱',
-      'crop': 'Plant as soon as first good rains arrive. Plant tobacco seedbeds.',
-      'livestock': 'FMD vaccination due. Weekly tick dipping starts.',
-      'general': 'Monitor weather forecasts daily. Have inputs ready before first rains.',
-    },
-    11: {
-      'title': 'November — Main Planting 🌱',
-      'crop': 'Plant maize, cotton, groundnuts. Top-dress tobacco. Weed early.',
-      'livestock': 'Watch for disease outbreaks after rains begin. Monitor tick loads.',
-      'general': 'Early planted crops are 2–3 weeks ahead — protect the advantage.',
-    },
-    12: {
-      'title': 'December — Growing Season 🌿',
-      'crop': 'Weed maize. Scout for Fall Armyworm. Apply insecticide in whorl if needed.',
-      'livestock': 'Continue weekly dipping. Ensure adequate water for all animals.',
-      'general': 'Peak growing season. Daily field scouting is critical now.',
-    },
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final info = _advice[month] ?? _advice[1]!;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.agriculture,
-                  color: AppColors.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(info['title']!,
-                    style: AppTextStyles.heading3),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _AdviceTile(
-              icon: '🌾',
-              title: 'Crop Tasks',
-              content: info['crop']!,
-              color: AppColors.primary),
-          const SizedBox(height: 10),
-          _AdviceTile(
-              icon: '🐄',
-              title: 'Livestock Tasks',
-              content: info['livestock']!,
-              color: AppColors.earth),
-          const SizedBox(height: 10),
-          _AdviceTile(
-              icon: '📋',
-              title: 'General',
-              content: info['general']!,
-              color: AppColors.info),
-        ],
-      ),
-    );
-  }
-}
-
-class _AdviceTile extends StatelessWidget {
-  final String icon;
-  final String title;
-  final String content;
-  final Color color;
-  const _AdviceTile(
-      {required this.icon,
-      required this.title,
-      required this.content,
-      required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(icon,
-              style: const TextStyle(fontSize: 20)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: AppTextStyles.label.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: color)),
-                const SizedBox(height: 3),
-                Text(content,
-                    style: AppTextStyles.body),
-              ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('🌧️',
+                style: TextStyle(fontSize: 56)),
+            const SizedBox(height: 16),
+            Text('Weather Unavailable',
+                style: AppTextStyles.heading3.copyWith(
+                    color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            Text(
+              error ??
+                  'Unable to load weather data. Check your connection.',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryLight,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+String _conditionEmoji(String condition) {
+  switch (condition.toLowerCase()) {
+    case 'clear':        return '☀️';
+    case 'clouds':       return '☁️';
+    case 'rain':         return '🌧️';
+    case 'drizzle':      return '🌦️';
+    case 'thunderstorm': return '⛈️';
+    case 'snow':         return '❄️';
+    case 'mist':
+    case 'fog':
+    case 'haze':         return '🌫️';
+    default:             return '🌤️';
+  }
+}
+
+String _capitalize(String s) =>
+    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);

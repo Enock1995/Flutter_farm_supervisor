@@ -11,6 +11,14 @@ import 'providers/crop_provider.dart';
 import 'providers/livestock_provider.dart';
 import 'providers/finance_provider.dart';
 import 'providers/horticulture_provider.dart';
+import 'providers/payment_provider.dart';
+import 'providers/connectivity_provider.dart';
+import 'providers/weather_provider.dart';
+import 'providers/market_price_provider.dart';
+import 'providers/agri_news_provider.dart';
+import 'providers/labour_provider.dart';
+import 'providers/farm_calendar_provider.dart';
+import 'services/subscription_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/registration_screen.dart';
@@ -22,6 +30,17 @@ import 'screens/weather/weather_screen.dart';
 import 'screens/finances/finance_screen.dart';
 import 'screens/horticulture/horticulture_screen.dart';
 import 'screens/knowledge_base/knowledge_base_screen.dart';
+import 'screens/paywall/paywall_screen.dart';
+import 'screens/paywall/payment_success_screen.dart';
+import 'screens/market/market_prices_screen.dart';
+import 'screens/news/agri_news_screen.dart';
+import 'screens/labour/labour_tracker_screen.dart';
+import 'screens/calendar/farm_calendar_screen.dart';
+import 'providers/pest_disease_provider.dart';
+import 'screens/pest_disease/pest_disease_screen.dart';
+import 'providers/soil_provider.dart';
+import 'screens/soil/soil_management_screen.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,6 +78,15 @@ class AgricAssistApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LivestockProvider()),
         ChangeNotifierProvider(create: (_) => FinanceProvider()),
         ChangeNotifierProvider(create: (_) => HorticultureProvider()),
+        ChangeNotifierProvider(create: (_) => PaymentProvider()),
+        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+        ChangeNotifierProvider(create: (_) => WeatherProvider()),
+        ChangeNotifierProvider(create: (_) => MarketPriceProvider()),
+        ChangeNotifierProvider(create: (_) => AgriNewsProvider()),
+        ChangeNotifierProvider(create: (_) => LabourProvider()),
+        ChangeNotifierProvider(create: (_) => FarmCalendarProvider()),
+        ChangeNotifierProvider(create: (_) => PestDiseaseProvider()),
+        ChangeNotifierProvider(create: (_) => SoilProvider()),
       ],
       child: MaterialApp(
         title: AppConstants.appName,
@@ -66,22 +94,67 @@ class AgricAssistApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         initialRoute: '/',
         routes: {
-          '/':              (context) => const SplashScreen(),
-          '/login':         (context) => const LoginScreen(),
-          '/register':      (context) => const RegistrationScreen(),
-          '/farm-profile':  (context) => const FarmProfileSetupScreen(),
-          '/dashboard':     (context) => const DashboardScreen(),
-          '/crops':         (context) => const CropManagementScreen(),
-          '/livestock':     (context) => const LivestockScreen(),
-          '/weather':       (context) => const WeatherScreen(),
-          '/finances':      (context) => const FinanceScreen(),
-          '/horticulture':  (context) => const HorticultureScreen(),
-          '/knowledge-base': (context) => const KnowledgeBaseScreen(),
+          '/':                (context) => const SplashScreen(),
+          '/login':           (context) => const LoginScreen(),
+          '/register':        (context) => const RegistrationScreen(),
+          '/farm-profile':    (context) => const FarmProfileSetupScreen(),
+          '/dashboard':       (context) => const _SubscriptionGate(
+                                  child: DashboardScreen()),
+          '/crops':           (context) => const _SubscriptionGate(
+                                  child: CropManagementScreen()),
+          '/livestock':       (context) => const _SubscriptionGate(
+                                  child: LivestockScreen()),
+          '/weather':         (context) => const _SubscriptionGate(
+                                  child: WeatherScreen()),
+          '/finances':        (context) => const _SubscriptionGate(
+                                  child: FinanceScreen()),
+          '/horticulture':    (context) => const _SubscriptionGate(
+                                  child: HorticultureScreen()),
+          '/knowledge-base':  (context) => const _SubscriptionGate(
+                                  child: KnowledgeBaseScreen()),
+          '/market':          (context) => const _SubscriptionGate(
+                                  child: MarketPricesScreen()),
+          '/news':            (context) => const _SubscriptionGate(
+                                  child: AgriNewsScreen()),
+          '/labour':          (context) => const _SubscriptionGate(
+                                  child: LabourTrackerScreen()),
+          '/calendar':        (context) => const _SubscriptionGate(
+                                  child: FarmCalendarScreen()),
+          '/paywall':         (context) => const PaywallScreen(),
+          '/payment-success': (context) => const PaymentSuccessScreen(),
+          '/pest-disease': (context) => const _SubscriptionGate(
+    child: PestDiseaseScreen()),
+    '/soil': (context) => const _SubscriptionGate(child: SoilManagementScreen()),
         },
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const LoginScreen(),
         ),
       ),
     );
+  }
+}
+
+// ── Subscription Gate ─────────────────────────────────────
+// Wraps every protected screen. If user is soft-locked,
+// shows PaywallScreen instead of the actual screen.
+class _SubscriptionGate extends StatelessWidget {
+  final Widget child;
+  const _SubscriptionGate({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+
+    // Not logged in — shouldn't happen but safe fallback
+    if (user == null) {
+      return const LoginScreen();
+    }
+
+    // Soft lock: trial expired + not subscribed
+    if (SubscriptionService.isSoftLocked(user)) {
+      return const PaywallScreen();
+    }
+
+    return child;
   }
 }

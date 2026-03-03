@@ -21,13 +21,13 @@ dependencies:
   # Secure Storage (for JWT token)
   flutter_secure_storage: ^9.0.0
 
-  # HTTP client (for backend API calls)
+  # HTTP client
   http: ^1.1.0
 
-  # Shared Preferences (for simple key-value storage)
+  # Shared Preferences
   shared_preferences: ^2.2.2
 
-  # Form validation helpers
+  # Form validation
   email_validator: ^2.1.17
 
   # Loading indicators
@@ -39,11 +39,14 @@ dependencies:
   # Date/time formatting
   intl: ^0.18.1
 
-  # Connectivity check (detect if online/offline)
+  # Connectivity check
   connectivity_plus: ^5.0.2
 
   # JSON serialization
   json_annotation: ^4.8.1
+
+  # Payment — Paynow SHA512 hash
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:
@@ -52,12 +55,26 @@ dev_dependencies:
   build_runner: ^2.4.6
   json_serializable: ^6.7.1
 
+  # App icon generator
+  flutter_launcher_icons: ^0.14.1
+
+# ─── App Icon Configuration ───────────────────────────────
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#1B5E20"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  web:
+    generate: false
+
 flutter:
   uses-material-design: true
+
   assets:
-    - assets/images/
-    - assets/data/
-    - assets/icons/
+    - assets/icon/
+
   fonts:
     - family: Poppins
       fonts:
