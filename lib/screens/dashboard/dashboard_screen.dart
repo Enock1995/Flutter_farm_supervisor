@@ -557,7 +557,7 @@ class _ModuleGrid extends StatelessWidget {
         'label': 'Irrigation\nManager',
         'color': AppColors.info,
         'route': '/irrigation',
-        'ready': false,
+        'ready': true,
       },
       {
         'icon':  Icons.layers_outlined,
@@ -572,15 +572,15 @@ class _ModuleGrid extends StatelessWidget {
         'icon':  Icons.calculate_outlined,
         'label': 'Input\nCalculator',
         'color': AppColors.success,
-        'route': '/calculator',
-        'ready': false,
+        'route': '/input-calculator',
+        'ready': true,
       },
       {
         'icon':  Icons.picture_as_pdf_outlined,
         'label': 'Reports\n& Export',
         'color': AppColors.primaryLight,
         'route': '/reports',
-        'ready': false,
+        'ready': true,
       },
       {
         'icon':  Icons.menu_book_outlined,

@@ -170,6 +170,8 @@ class AgriNewsService {
       if (cached != null) return cached;
     }
 
+    // Try fetching live — track whether we had a network error
+    bool networkFailed = false;
     try {
       final articles = await _fetchFromFeeds();
       if (articles.isNotEmpty) {
@@ -180,28 +182,30 @@ class AgriNewsService {
           isFromCache: false,
         );
       }
+      // Feeds reachable but returned no matching articles —
+      // show static content silently (no error banner)
     } catch (_) {
-      // fall through
+      networkFailed = true;
     }
 
-    // Stale cache
+    // Stale cache — show with offline notice only if network actually failed
     final stale = _loadCache(prefs, ignoreAge: true);
     if (stale != null) {
       return NewsResult(
         articles: stale.articles,
         fetchedAt: stale.fetchedAt,
         isFromCache: true,
-        error: 'Offline — showing cached news.',
+        error: networkFailed ? 'Offline — showing cached news.' : null,
       );
     }
 
-    // Static curated fallback
+    // Static curated fallback — only show error banner if truly offline
     final staticArticles = _staticArticles();
     return NewsResult(
       articles: _applyReadState(staticArticles, prefs),
       fetchedAt: DateTime.now(),
       isFromCache: false,
-      error: 'Connect to internet for live news.',
+      error: networkFailed ? 'You are offline — showing curated news.' : null,
     );
   }
 
@@ -351,11 +355,19 @@ class AgriNewsService {
       'soil', 'irrigation', 'livestock', 'cattle', 'seed', 'fertilizer',
       'fertiliser', 'drought', 'rain', 'rainfall', 'grain', 'vegetable',
       'horticulture', 'cotton', 'soya', 'soybean', 'groundnut', 'food',
-      'rural', 'farmer', 'gvt', 'gmb', 'agritex', 'zimra', 'zimstat',
-      'produce', 'market price', 'commodity', 'export', 'import food',
+      'rural', 'farmer', 'gmb', 'agritex', 'produce', 'market price',
+      'commodity', 'export', 'import food', 'land', 'crop production',
+      'food security', 'hunger', 'famine', 'harvest', 'planting',
+      'season', 'yield', 'tonne', 'ton', 'hectare', 'acre',
     ];
-    final combined = '$title $content';
-    return keywords.any((kw) => combined.contains(kw));
+    final combined = '$title $content'.toLowerCase();
+    // Accept if ANY keyword matches in title OR if 2+ match in content
+    final titleMatches =
+        keywords.any((kw) => title.toLowerCase().contains(kw));
+    if (titleMatches) return true;
+    final contentMatches =
+        keywords.where((kw) => combined.contains(kw)).length;
+    return contentMatches >= 2;
   }
 
   static String _classifyCategory(

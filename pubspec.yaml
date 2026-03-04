@@ -17,6 +17,7 @@ dependencies:
   sqflite: ^2.3.0
   sqflite_common_ffi: ^2.3.0
   path: ^1.8.3
+  path_provider: ^2.1.0
 
   # Secure Storage (for JWT token)
   flutter_secure_storage: ^9.0.0
@@ -47,6 +48,9 @@ dependencies:
 
   # Payment — Paynow SHA512 hash
   crypto: ^3.0.3
+
+  # File share
+  share_plus: ^7.2.0
 
 dev_dependencies:
   flutter_test:

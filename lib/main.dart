@@ -40,6 +40,12 @@ import 'providers/pest_disease_provider.dart';
 import 'screens/pest_disease/pest_disease_screen.dart';
 import 'providers/soil_provider.dart';
 import 'screens/soil/soil_management_screen.dart';
+import 'providers/irrigation_provider.dart';
+import 'screens/irrigation/irrigation_screen.dart';
+import 'providers/input_calculator_provider.dart';
+import 'screens/input_calculator/input_calculator_screen.dart';
+import 'providers/reports_provider.dart';
+import 'screens/reports/reports_screen.dart';
 
 
 void main() async {
@@ -87,6 +93,9 @@ class AgricAssistApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FarmCalendarProvider()),
         ChangeNotifierProvider(create: (_) => PestDiseaseProvider()),
         ChangeNotifierProvider(create: (_) => SoilProvider()),
+        ChangeNotifierProvider(create: (_) => IrrigationProvider()),
+        ChangeNotifierProvider(create: (_) => InputCalculatorProvider()),
+        ChangeNotifierProvider(create: (_) => ReportsProvider()),
       ],
       child: MaterialApp(
         title: AppConstants.appName,
@@ -125,6 +134,10 @@ class AgricAssistApp extends StatelessWidget {
           '/pest-disease': (context) => const _SubscriptionGate(
     child: PestDiseaseScreen()),
     '/soil': (context) => const _SubscriptionGate(child: SoilManagementScreen()),
+    '/irrigation': (context) => const _SubscriptionGate(child: IrrigationScreen()),
+    '/input-calculator': (context) => const _SubscriptionGate(
+    child: InputCalculatorScreen()),
+    '/reports': (context) => const _SubscriptionGate(child: ReportsScreen()),
         },
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const LoginScreen(),
