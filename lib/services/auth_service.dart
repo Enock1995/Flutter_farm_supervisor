@@ -176,6 +176,16 @@ class AuthService {
   }
 
   // ---------------------------------------------------------------------------
+  // PUBLIC HELPERS — used by AuthProvider
+  // ---------------------------------------------------------------------------
+
+  /// Exposes password hashing so AuthProvider can verify/update passwords.
+  String hashPassword(String password) => _hashPassword(password);
+
+  /// Exposes the raw database so AuthProvider can perform direct updates.
+  Future<dynamic> getDatabase() => _db.database;
+
+  // ---------------------------------------------------------------------------
   // DISTRICT REGION RESOLUTION
   // ---------------------------------------------------------------------------
   Future<_RegionResult> _resolveRegion(
@@ -214,7 +224,7 @@ class AuthService {
   }
 
   // ---------------------------------------------------------------------------
-  // HELPERS
+  // PRIVATE HELPERS
   // ---------------------------------------------------------------------------
   String _hashPassword(String password) {
     final bytes = utf8.encode(password);

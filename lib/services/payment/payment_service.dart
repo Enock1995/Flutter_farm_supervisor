@@ -1,21 +1,21 @@
 // lib/services/payment/payment_service.dart
 // Developed by Sir Enocks — Cor Technologies
+//
+// Active gateways:
+//   ecocash → Paynow EcoCash mobile push ✅
+//   zbbank  → ZB Bank redirect (stub, needs live server) ⏳
 
 import 'paynow_service.dart';
-import 'stripe_service.dart';
-import 'innbucks_service.dart';
 
 class PaymentInitResult {
   final bool success;
   final String? pollReference;
-  final String? redirectUrl;
   final String? errorMessage;
   final String? instructions;
 
   const PaymentInitResult({
     required this.success,
     this.pollReference,
-    this.redirectUrl,
     this.errorMessage,
     this.instructions,
   });
@@ -23,9 +23,8 @@ class PaymentInitResult {
 
 class PaymentService {
   final PaynowService _paynow = PaynowService();
-  final StripeService _stripe = StripeService();
-  final InnbucksService _innbucks = InnbucksService();
 
+  // ── Initiate payment ──────────────────────────────────
   Future<PaymentInitResult> initiate({
     required String gatewayId,
     required String userId,
@@ -34,23 +33,21 @@ class PaymentService {
   }) async {
     switch (gatewayId) {
       case 'ecocash':
-      case 'onemoney':
         return _paynow.initiate(
-          method: gatewayId,
           userId: userId,
           phone: phone,
           email: email,
         );
-      case 'stripe':
-        return _stripe.initiate(
-          userId: userId,
-          email: email,
+
+      case 'zbbank':
+        // ZB Bank needs redirect flow + live server.
+        // Stub until backend is ready.
+        return const PaymentInitResult(
+          success: false,
+          errorMessage:
+              'ZB Bank payments are coming soon. Please use EcoCash for now.',
         );
-      case 'innbucks':
-        return _innbucks.initiate(
-          userId: userId,
-          phone: phone,
-        );
+
       default:
         return const PaymentInitResult(
           success: false,
@@ -59,18 +56,16 @@ class PaymentService {
     }
   }
 
+  // ── Poll for confirmation ─────────────────────────────
   Future<bool> pollStatus({
     required String reference,
     required String gatewayId,
   }) async {
     switch (gatewayId) {
       case 'ecocash':
-      case 'onemoney':
         return _paynow.pollStatus(reference);
-      case 'stripe':
-        return _stripe.pollStatus(reference);
-      case 'innbucks':
-        return _innbucks.pollStatus(reference);
+      case 'zbbank':
+        return false;
       default:
         return false;
     }

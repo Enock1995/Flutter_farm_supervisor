@@ -1,6 +1,7 @@
 // lib/screens/profile/profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../constants/app_theme.dart';
 import '../../constants/zimbabwe_districts.dart';
 import '../../providers/auth_provider.dart';
@@ -24,7 +25,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
 
-    // Load farm profile when screen opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<AuthProvider>().user;
       if (user != null) {
@@ -66,9 +66,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // SLIVER HEADER with profile avatar + tabs
-  // ---------------------------------------------------------------------------
   Widget _buildSliverHeader(UserModel user, bool innerBoxIsScrolled) {
     return SliverAppBar(
       expandedHeight: 220,
@@ -92,15 +89,13 @@ class _ProfileScreenState extends State<ProfileScreen>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 40),
-                // Avatar circle
                 Container(
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
-                    border: Border.all(
-                        color: Colors.white, width: 3),
+                    border: Border.all(color: Colors.white, width: 3),
                   ),
                   child: Center(
                     child: Text(
@@ -119,9 +114,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 const SizedBox(height: 4),
                 Text(
                   user.userId,
-                  style: AppTextStyles.caption
-                      .copyWith(color: Colors.white70,
-                          letterSpacing: 1.2),
+                  style: AppTextStyles.caption.copyWith(
+                      color: Colors.white70, letterSpacing: 1.2),
                 ),
                 const SizedBox(height: 4),
                 _RegionPill(region: user.agroRegion),
@@ -136,8 +130,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         indicatorWeight: 3,
         labelColor: Colors.white,
         unselectedLabelColor: Colors.white54,
-        labelStyle: AppTextStyles.body
-            .copyWith(fontWeight: FontWeight.w600),
+        labelStyle:
+            AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
         tabs: const [
           Tab(text: 'Personal'),
           Tab(text: 'Farm'),
@@ -168,8 +162,7 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
   @override
   void initState() {
     super.initState();
-    _nameController =
-        TextEditingController(text: widget.user.fullName);
+    _nameController = TextEditingController(text: widget.user.fullName);
     _emailController =
         TextEditingController(text: widget.user.email ?? '');
     _selectedLanguage = widget.user.language;
@@ -187,8 +180,11 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
       _showError('Name cannot be empty.');
       return;
     }
-    // TODO: wire up to auth provider update method in next session
+    await context
+        .read<AuthProvider>()
+        .updateFullName(_nameController.text.trim());
     setState(() => _isEditing = false);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Profile updated successfully!'),
@@ -214,12 +210,10 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // Edit / Save button row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Personal Details',
-                  style: AppTextStyles.heading3),
+              Text('Personal Details', style: AppTextStyles.heading3),
               TextButton.icon(
                 onPressed: () {
                   if (_isEditing) {
@@ -238,7 +232,6 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
           ),
           const SizedBox(height: 16),
 
-          // Info cards
           _InfoCard(
             label: 'Full Name',
             icon: Icons.person_outline,
@@ -251,7 +244,7 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
           _InfoCard(
             label: 'Phone Number',
             icon: Icons.phone_outlined,
-            isEditing: false, // phone cannot be changed
+            isEditing: false,
             staticValue: _formatPhone(user.phone),
             suffix: const _LockedBadge(),
           ),
@@ -267,13 +260,10 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
           ),
           const SizedBox(height: 12),
 
-          // Language selector
           _buildLanguageCard(),
           const SizedBox(height: 24),
 
-          // Account details (read-only section)
-          Text('Account Details',
-              style: AppTextStyles.heading3),
+          Text('Account Details', style: AppTextStyles.heading3),
           const SizedBox(height: 16),
 
           _ReadOnlyCard(
@@ -303,7 +293,6 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
               value: _formatDate(user.registeredAt)),
           const SizedBox(height: 12),
 
-          // Subscription status
           _buildSubscriptionCard(user),
           const SizedBox(height: 30),
         ],
@@ -324,18 +313,15 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
         children: [
           Row(
             children: [
-              const Icon(Icons.language,
-                  color: AppColors.primary, size: 20),
+              const Icon(Icons.language, color: AppColors.primary, size: 20),
               const SizedBox(width: 10),
-              Text('Preferred Language',
-                  style: AppTextStyles.label),
+              Text('Preferred Language', style: AppTextStyles.label),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: AppConstants.languages.map((lang) {
-              final isSelected =
-                  _selectedLanguage == lang['code'];
+              final isSelected = _selectedLanguage == lang['code'];
               return Expanded(
                 child: GestureDetector(
                   onTap: _isEditing
@@ -345,8 +331,7 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppColors.primary
@@ -361,17 +346,13 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
                     child: Column(
                       children: [
                         Text(
-                          lang['code'] == 'en'
-                              ? '🇬🇧'
-                              : '🇿🇼',
-                          style:
-                              const TextStyle(fontSize: 16),
+                          lang['code'] == 'en' ? '🇬🇧' : '🇿🇼',
+                          style: const TextStyle(fontSize: 16),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           lang['name']!.split(' ').first,
-                          style:
-                              AppTextStyles.caption.copyWith(
+                          style: AppTextStyles.caption.copyWith(
                             color: isSelected
                                 ? Colors.white
                                 : AppColors.textSecondary,
@@ -393,6 +374,8 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
     );
   }
 
+  // Upgrade button removed — subscription status is read-only here.
+  // Users access upgrade via the dashboard trial banner.
   Widget _buildSubscriptionCard(UserModel user) {
     final isActive = user.isSubscribed;
     final color = isActive ? AppColors.success : AppColors.warning;
@@ -407,9 +390,7 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
       child: Row(
         children: [
           Icon(
-            isActive
-                ? Icons.verified_outlined
-                : Icons.access_time,
+            isActive ? Icons.verified_outlined : Icons.access_time,
             color: color,
             size: 28,
           ),
@@ -423,31 +404,23 @@ class _PersonalInfoTabState extends State<_PersonalInfoTab> {
                       ? 'Lifetime Subscriber ✓'
                       : '${user.trialDaysRemaining} days left in trial',
                   style: AppTextStyles.body.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: color),
+                      fontWeight: FontWeight.w700, color: color),
                 ),
                 Text(
                   isActive
                       ? 'Full access to all features'
-                      : 'Upgrade for just £2.50 — one-time payment',
+                      : 'Upgrade for just \$2.99 — one-time payment',
                   style: AppTextStyles.bodySmall,
                 ),
               ],
             ),
           ),
-          if (!isActive)
-            TextButton(
-              onPressed: () {},
-              child: Text('Upgrade',
-                  style: TextStyle(color: color)),
-            ),
         ],
       ),
     );
   }
 
   String _formatPhone(String phone) {
-    // Convert 2637XXXXXXXX → +263 7XX XXX XXX
     if (phone.startsWith('263') && phone.length >= 12) {
       final local = phone.substring(3);
       return '+263 ${local.substring(0, 2)} ${local.substring(2, 5)} ${local.substring(5)}';
@@ -478,7 +451,6 @@ class _FarmProfileTab extends StatefulWidget {
 class _FarmProfileTabState extends State<_FarmProfileTab> {
   bool _isEditing = false;
 
-  // Edit controllers
   late TextEditingController _farmSizeController;
   List<String> _editCrops = [];
   List<String> _editLivestock = [];
@@ -522,11 +494,9 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
   }
 
   void _initFromProfile() {
-    final profile =
-        context.read<FarmProfileProvider>().farmProfile;
+    final profile = context.read<FarmProfileProvider>().farmProfile;
     if (profile != null) {
-      _farmSizeController.text =
-          profile.farmSizeHectares.toString();
+      _farmSizeController.text = profile.farmSizeHectares.toString();
       _editCrops = List.from(profile.crops);
       _editLivestock = List.from(profile.livestock);
       _editSoilType = profile.soilType;
@@ -542,8 +512,7 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
   }
 
   Future<void> _saveChanges() async {
-    final size =
-        double.tryParse(_farmSizeController.text.trim());
+    final size = double.tryParse(_farmSizeController.text.trim());
     if (size == null || size <= 0) {
       _showError('Please enter a valid farm size.');
       return;
@@ -605,13 +574,10 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header row
               Row(
-                mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Farm Profile',
-                      style: AppTextStyles.heading3),
+                  Text('Farm Profile', style: AppTextStyles.heading3),
                   TextButton.icon(
                     onPressed: () {
                       if (_isEditing) {
@@ -650,31 +616,19 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
                   ),
                 ),
 
-              // Farm size
               _buildFarmSizeSection(profile),
               const SizedBox(height: 20),
-
-              // Crops
               _buildCropsSection(),
               const SizedBox(height: 20),
-
-              // Livestock
               _buildLivestockSection(),
               const SizedBox(height: 20),
-
-              // Soil type
               _buildSoilSection(),
               const SizedBox(height: 20),
-
-              // Water source
               _buildWaterSection(),
               const SizedBox(height: 20),
-
-              // Irrigation
               _buildIrrigationToggle(),
               const SizedBox(height: 20),
 
-              // Last updated
               Center(
                 child: Text(
                   'Last updated: ${_formatDate(profile.updatedAt)}',
@@ -696,8 +650,8 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
       child: _isEditing
           ? TextFormField(
               controller: _farmSizeController,
-              keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 suffixText: 'Hectares',
                 border: OutlineInputBorder(
@@ -779,8 +733,7 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
               spacing: 8,
               runSpacing: 8,
               children: _allLivestock.map((animal) {
-                final selected =
-                    _editLivestock.contains(animal);
+                final selected = _editLivestock.contains(animal);
                 return GestureDetector(
                   onTap: () => setState(() => selected
                       ? _editLivestock.remove(animal)
@@ -794,8 +747,7 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
             )
           : Consumer<FarmProfileProvider>(
               builder: (_, p, __) {
-                final livestock =
-                    p.farmProfile?.livestock ?? [];
+                final livestock = p.farmProfile?.livestock ?? [];
                 if (livestock.isEmpty) {
                   return Text('No livestock recorded.',
                       style: AppTextStyles.bodySmall);
@@ -826,8 +778,7 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
               children: _soilTypes.map((soil) {
                 final selected = _editSoilType == soil;
                 return GestureDetector(
-                  onTap: () =>
-                      setState(() => _editSoilType = soil),
+                  onTap: () => setState(() => _editSoilType = soil),
                   child: _Chip(
                       label: _capitalize(soil),
                       selected: selected,
@@ -837,8 +788,7 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
             )
           : Consumer<FarmProfileProvider>(
               builder: (_, p, __) => Text(
-                _capitalize(
-                    p.farmProfile?.soilType ?? 'Not set'),
+                _capitalize(p.farmProfile?.soilType ?? 'Not set'),
                 style: AppTextStyles.body
                     .copyWith(fontWeight: FontWeight.w600),
               ),
@@ -857,8 +807,8 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
               children: _waterSources.map((w) {
                 final selected = _editWaterSource == w['value'];
                 return GestureDetector(
-                  onTap: () => setState(
-                      () => _editWaterSource = w['value']),
+                  onTap: () =>
+                      setState(() => _editWaterSource = w['value']),
                   child: _Chip(
                       label: w['label']!,
                       selected: selected,
@@ -872,12 +822,11 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
                 final label = _waterSources
                     .firstWhere(
                       (w) => w['value'] == source,
-                      orElse: () =>
-                          {'label': source ?? 'Not set'},
+                      orElse: () => {'label': source ?? 'Not set'},
                     )['label']!;
                 return Text(label,
-                    style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w600));
+                    style: AppTextStyles.body
+                        .copyWith(fontWeight: FontWeight.w600));
               },
             ),
     );
@@ -889,8 +838,9 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
       icon: Icons.water_outlined,
       child: Consumer<FarmProfileProvider>(
         builder: (_, p, __) {
-          final hasIrrigation =
-              _isEditing ? _editHasIrrigation : (p.farmProfile?.hasIrrigation ?? false);
+          final hasIrrigation = _isEditing
+              ? _editHasIrrigation
+              : (p.farmProfile?.hasIrrigation ?? false);
           return Row(
             children: [
               Expanded(
@@ -947,8 +897,8 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
             PrimaryButton(
               label: 'Set Up Farm Profile',
               icon: Icons.add,
-              onPressed: () => Navigator.pushNamed(
-                  context, '/farm-profile'),
+              onPressed: () =>
+                  Navigator.pushNamed(context, '/farm-profile'),
             ),
           ],
         ),
@@ -976,6 +926,21 @@ class _FarmProfileTabState extends State<_FarmProfileTab> {
 class _AppInfoTab extends StatelessWidget {
   const _AppInfoTab();
 
+  Future<void> _launchUrl(BuildContext context, String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open link. Check your internet connection.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -984,7 +949,6 @@ class _AppInfoTab extends StatelessWidget {
         children: [
           const SizedBox(height: 16),
 
-          // App logo
           Container(
             width: 90,
             height: 90,
@@ -999,8 +963,7 @@ class _AppInfoTab extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.grass,
-                color: Colors.white, size: 50),
+            child: const Icon(Icons.grass, color: Colors.white, size: 50),
           ),
           const SizedBox(height: 16),
 
@@ -1015,7 +978,6 @@ class _AppInfoTab extends StatelessWidget {
 
           const SizedBox(height: 32),
 
-          // Developer credit card
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -1029,31 +991,21 @@ class _AppInfoTab extends StatelessWidget {
             ),
             child: Column(
               children: [
-                const Text('🛠️',
-                    style: TextStyle(fontSize: 32)),
+                const Text('🛠️', style: TextStyle(fontSize: 32)),
                 const SizedBox(height: 10),
-                Text(
-                  'Developed by',
-                  style: AppTextStyles.bodySmall
-                      .copyWith(color: Colors.white60),
-                ),
+                Text('Developed by',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: Colors.white60)),
                 const SizedBox(height: 6),
-                Text(
-                  'Sir Enocks',
-                  style: AppTextStyles.heading2
-                      .copyWith(color: Colors.white),
-                ),
-                Text(
-                  'Cor Technologies',
-                  style: AppTextStyles.heading3.copyWith(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.w700),
-                ),
+                Text('Sir Enocks',
+                    style: AppTextStyles.heading2
+                        .copyWith(color: Colors.white)),
+                Text('Cor Technologies',
+                    style: AppTextStyles.heading3.copyWith(
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w700)),
                 const SizedBox(height: 10),
-                Container(
-                  height: 1,
-                  color: Colors.white24,
-                ),
+                Container(height: 1, color: Colors.white24),
                 const SizedBox(height: 10),
                 Text(
                   'Empowering Zimbabwean farmers\nthrough smart technology 🇿🇼',
@@ -1067,7 +1019,6 @@ class _AppInfoTab extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          // App purpose card
           _AppInfoTile(
             icon: Icons.agriculture,
             title: 'Our Mission',
@@ -1086,7 +1037,7 @@ class _AppInfoTab extends StatelessWidget {
             icon: Icons.payments_outlined,
             title: 'Subscription',
             value:
-                '14-day free trial, then £2.50 (one-time lifetime payment). Payable via EcoCash, OneMoney, Innbucks, Visa/Mastercard.',
+                '14-day free trial, then \$2.99 USD (one-time lifetime payment). Payable via EcoCash.',
           ),
           const SizedBox(height: 12),
           _AppInfoTile(
@@ -1095,9 +1046,30 @@ class _AppInfoTab extends StatelessWidget {
             value: 'English, ChiShona, IsiNdebele',
           ),
 
+          const SizedBox(height: 28),
+
+          // ── External links ───────────────────────────
+          _LinkButton(
+            icon: Icons.language_outlined,
+            label: 'Visit Our Website',
+            subtitle: 'blog3.wuaze.com',
+            color: AppColors.primary,
+            onTap: () => _launchUrl(
+                context, 'https://blog3.wuaze.com'),
+          ),
+          const SizedBox(height: 12),
+          _LinkButton(
+            icon: Icons.privacy_tip_outlined,
+            label: 'Privacy Policy',
+            subtitle: 'How we protect your data',
+            color: AppColors.info,
+            onTap: () => _launchUrl(
+                context,
+                'https://blog3.wuaze.com/privacy-policy.html'),
+          ),
+
           const SizedBox(height: 32),
 
-          // Zimbabwe flag footer
           const Text('🇿🇼', style: TextStyle(fontSize: 40)),
           const SizedBox(height: 8),
           Text(
@@ -1107,6 +1079,76 @@ class _AppInfoTab extends StatelessWidget {
           ),
           const SizedBox(height: 30),
         ],
+      ),
+    );
+  }
+}
+
+// ── Link button widget ────────────────────────────────────
+class _LinkButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _LinkButton({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+            horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.35)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary)),
+                  Text(subtitle,
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            Icon(Icons.open_in_new,
+                color: color.withOpacity(0.6), size: 18),
+          ],
+        ),
       ),
     );
   }
@@ -1122,11 +1164,9 @@ class _RegionPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        AppColors.regionColors[region] ?? AppColors.accent;
+    final color = AppColors.regionColors[region] ?? AppColors.accent;
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.25),
         borderRadius: BorderRadius.circular(20),
@@ -1168,9 +1208,7 @@ class _InfoCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: isEditing
-                ? AppColors.primary
-                : AppColors.divider,
+            color: isEditing ? AppColors.primary : AppColors.divider,
             width: isEditing ? 2 : 1),
       ),
       child: Row(
@@ -1243,8 +1281,7 @@ class _ReadOnlyCard extends StatelessWidget {
                 Text(value,
                     style: AppTextStyles.body.copyWith(
                       fontWeight: FontWeight.w600,
-                      color:
-                          valueColor ?? AppColors.textPrimary,
+                      color: valueColor ?? AppColors.textPrimary,
                     )),
               ],
             ),
@@ -1263,8 +1300,7 @@ class _LockedBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(6),
@@ -1334,8 +1370,7 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
-      padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: selected
             ? selectedColor
@@ -1353,18 +1388,13 @@ class _Chip extends StatelessWidget {
           if (selected)
             Padding(
               padding: const EdgeInsets.only(right: 4),
-              child: Icon(Icons.check,
-                  size: 12, color: Colors.white),
+              child: Icon(Icons.check, size: 12, color: Colors.white),
             ),
           Text(
             label,
             style: AppTextStyles.bodySmall.copyWith(
-              color: selected
-                  ? Colors.white
-                  : AppColors.textPrimary,
-              fontWeight: selected
-                  ? FontWeight.w600
-                  : FontWeight.w400,
+              color: selected ? Colors.white : AppColors.textPrimary,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
         ],
@@ -1402,8 +1432,7 @@ class _AppInfoTile extends StatelessWidget {
               color: AppColors.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon,
-                color: AppColors.primary, size: 20),
+            child: Icon(icon, color: AppColors.primary, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1411,11 +1440,10 @@ class _AppInfoTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w600)),
+                    style: AppTextStyles.body
+                        .copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                Text(value,
-                    style: AppTextStyles.bodySmall),
+                Text(value, style: AppTextStyles.bodySmall),
               ],
             ),
           ),

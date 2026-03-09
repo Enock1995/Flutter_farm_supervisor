@@ -18,8 +18,11 @@ class PaywallScreen extends StatelessWidget {
     final daysLeft = SubscriptionService.trialDaysRemaining(user);
     final isExpired = SubscriptionService.isSoftLocked(user);
 
+    // Allow back navigation if user came from dashboard (not soft-locked)
+    final canGoBack = !isExpired;
+
     return PopScope(
-      canPop: false, // prevent back button escape
+      canPop: canGoBack,
       child: Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(
@@ -28,7 +31,21 @@ class PaywallScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 20),
+                // ── Back button (only when not expired) ──
+                if (canGoBack)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back,
+                          color: AppColors.textSecondary),
+                      label: Text('Back to Dashboard',
+                          style: AppTextStyles.body.copyWith(
+                              color: AppColors.textSecondary)),
+                    ),
+                  ),
+
+                const SizedBox(height: 8),
 
                 // ── Header ──────────────────────────────
                 Container(
@@ -104,7 +121,7 @@ class PaywallScreen extends StatelessWidget {
                         crossAxisAlignment:
                             CrossAxisAlignment.start,
                         children: [
-                          Text('£',
+                          Text('\$',
                               style: AppTextStyles.body
                                   .copyWith(
                                       color: AppColors.primary,
@@ -116,7 +133,7 @@ class PaywallScreen extends StatelessWidget {
                                   .copyWith(
                                       color: AppColors.primary,
                                       fontSize: 64)),
-                          Text('.50',
+                          Text('.99',
                               style: AppTextStyles.body
                                   .copyWith(
                                       color: AppColors.primary,
@@ -125,7 +142,7 @@ class PaywallScreen extends StatelessWidget {
                                           FontWeight.w700)),
                         ],
                       ),
-                      Text('Pay once, use forever 🇿🇼',
+                      Text('USD · Pay once, use forever 🇿🇼',
                           style: AppTextStyles.caption),
                     ],
                   ),
@@ -133,30 +150,52 @@ class PaywallScreen extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // ── Features list ────────────────────────
-                _FeatureRow(
-                    icon: Icons.agriculture,
-                    text:
-                        'Full crop management & harvest tracking'),
-                _FeatureRow(
-                    icon: Icons.pets,
-                    text:
-                        'Livestock records & health monitoring'),
+                // ── All modules list ─────────────────────
                 _FeatureRow(
                     icon: Icons.eco,
-                    text:
-                        'Horticulture plot management'),
+                    text: 'Crop Management'),
                 _FeatureRow(
-                    icon: Icons.menu_book,
-                    text:
-                        'Knowledge base & farming guides'),
+                    icon: Icons.pets,
+                    text: 'Livestock Management'),
                 _FeatureRow(
-                    icon: Icons.attach_money,
-                    text: 'Finance & expense tracking'),
+                    icon: Icons.local_florist_outlined,
+                    text: 'Horticulture'),
                 _FeatureRow(
-                    icon: Icons.cloud,
-                    text:
-                        'Weather forecasts & market prices'),
+                    icon: Icons.wb_sunny_outlined,
+                    text: 'Weather Forecasts'),
+                _FeatureRow(
+                    icon: Icons.storefront_outlined,
+                    text: 'Market Prices'),
+                _FeatureRow(
+                    icon: Icons.newspaper_outlined,
+                    text: 'Agri News'),
+                _FeatureRow(
+                    icon: Icons.account_balance_wallet_outlined,
+                    text: 'Finance & Expense Tracking'),
+                _FeatureRow(
+                    icon: Icons.calendar_month_outlined,
+                    text: 'Farm Calendar'),
+                _FeatureRow(
+                    icon: Icons.people_outline,
+                    text: 'Labour Tracker'),
+                _FeatureRow(
+                    icon: Icons.bug_report_outlined,
+                    text: 'Pest & Disease Advisor'),
+                _FeatureRow(
+                    icon: Icons.water_drop_outlined,
+                    text: 'Irrigation Manager'),
+                _FeatureRow(
+                    icon: Icons.layers_outlined,
+                    text: 'Soil Management'),
+                _FeatureRow(
+                    icon: Icons.calculate_outlined,
+                    text: 'Input Calculator'),
+                _FeatureRow(
+                    icon: Icons.picture_as_pdf_outlined,
+                    text: 'Reports & Export'),
+                _FeatureRow(
+                    icon: Icons.menu_book_outlined,
+                    text: 'Knowledge Base'),
                 _FeatureRow(
                     icon: Icons.update,
                     text: 'All future updates included'),
@@ -179,36 +218,14 @@ class PaywallScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
 
-                // OneMoney
+                // ZB Bank
                 _PaymentButton(
-                  label: 'Pay with OneMoney',
-                  subtitle: 'NetOne mobile money',
-                  color: const Color(0xFF0066CC),
-                  icon: Icons.phone_android,
+                  label: 'Pay with ZB Bank',
+                  subtitle: 'ZB Bank internet banking',
+                  color: const Color(0xFF1A237E),
+                  icon: Icons.account_balance,
                   onTap: () => _openPayment(
-                      context, 'onemoney'),
-                ),
-                const SizedBox(height: 10),
-
-                // Innbucks
-                _PaymentButton(
-                  label: 'Pay with Innbucks',
-                  subtitle: 'Innscor digital wallet',
-                  color: const Color(0xFFFF6600),
-                  icon: Icons.account_balance_wallet,
-                  onTap: () => _openPayment(
-                      context, 'innbucks'),
-                ),
-                const SizedBox(height: 10),
-
-                // Stripe
-                _PaymentButton(
-                  label: 'Pay with Card',
-                  subtitle: 'Visa / Mastercard via Stripe',
-                  color: const Color(0xFF6772E5),
-                  icon: Icons.credit_card,
-                  onTap: () => _openPayment(
-                      context, 'stripe'),
+                      context, 'zbbank'),
                 ),
 
                 const SizedBox(height: 28),
@@ -328,8 +345,7 @@ class _PaymentButton extends StatelessWidget {
                   Text(subtitle,
                       style: AppTextStyles.caption
                           .copyWith(
-                              color:
-                                  Colors.white70)),
+                              color: Colors.white70)),
                 ],
               ),
             ),

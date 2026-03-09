@@ -127,6 +127,53 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
+  // UPDATE FULL NAME
+  // ---------------------------------------------------------------------------
+  Future<void> updateFullName(String name) async {
+    final db = await _authService.getDatabase();
+    await db.update('users', {'full_name': name},
+        where: 'user_id = ?', whereArgs: [_user!.userId]);
+    _user = _user!.copyWith(fullName: name);
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // CHANGE PASSWORD
+  // ---------------------------------------------------------------------------
+  Future<bool> changePassword(String current, String newPass) async {
+    final db = await _authService.getDatabase();
+    final hash = _authService.hashPassword(current);
+    final rows = await db.query('users',
+        where: 'user_id = ? AND password_hash = ?',
+        whereArgs: [_user!.userId, hash]);
+    if (rows.isEmpty) return false;
+    await db.update('users',
+        {'password_hash': _authService.hashPassword(newPass)},
+        where: 'user_id = ?', whereArgs: [_user!.userId]);
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // DELETE ACCOUNT
+  // ---------------------------------------------------------------------------
+  Future<void> deleteAccount() async {
+    final db = await _authService.getDatabase();
+    final userId = _user!.userId;
+    for (final table in [
+      'users', 'farm_profiles', 'crops', 'livestock',
+      'finance_records', 'labour_sessions', 'irrigation_setups',
+      'irrigation_logs', 'soil_records', 'farm_alerts', 'saved_calculations'
+    ]) {
+      try {
+        await db.delete(table, where: 'user_id = ?', whereArgs: [userId]);
+      } catch (_) {}
+    }
+    _user = null;
+    _status = AuthStatus.unauthenticated;
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
   // INTERNAL
   // ---------------------------------------------------------------------------
   void _setLoading() {

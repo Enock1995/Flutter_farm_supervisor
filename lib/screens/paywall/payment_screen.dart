@@ -18,11 +18,8 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  final _phoneController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _cardController  = TextEditingController();
-  final _expiryController = TextEditingController();
-  final _cvvController   = TextEditingController();
+  final _phoneController  = TextEditingController();
+  final _emailController  = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   Timer? _pollTimer;
@@ -32,7 +29,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill from user profile
     final user = context.read<AuthProvider>().user;
     if (user != null) {
       _phoneController.text = user.phone;
@@ -45,48 +41,36 @@ class _PaymentScreenState extends State<PaymentScreen> {
     _pollTimer?.cancel();
     _phoneController.dispose();
     _emailController.dispose();
-    _cardController.dispose();
-    _expiryController.dispose();
-    _cvvController.dispose();
     super.dispose();
   }
 
   String get _gatewayLabel {
     switch (widget.gateway) {
-      case 'ecocash':  return 'EcoCash';
-      case 'onemoney': return 'OneMoney';
-      case 'innbucks': return 'Innbucks';
-      case 'stripe':   return 'Card (Stripe)';
-      default:         return widget.gateway;
+      case 'ecocash': return 'EcoCash';
+      case 'zbbank':  return 'ZB Bank';
+      default:        return widget.gateway;
     }
   }
 
   Color get _gatewayColor {
     switch (widget.gateway) {
-      case 'ecocash':  return const Color(0xFFCC0000);
-      case 'onemoney': return const Color(0xFF0066CC);
-      case 'innbucks': return const Color(0xFFFF6600);
-      case 'stripe':   return const Color(0xFF6772E5);
-      default:         return AppColors.primary;
+      case 'ecocash': return const Color(0xFFCC0000);
+      case 'zbbank':  return const Color(0xFF1A237E);
+      default:        return AppColors.primary;
     }
   }
-
-  bool get _isMobilePayment =>
-      widget.gateway == 'ecocash' ||
-      widget.gateway == 'onemoney' ||
-      widget.gateway == 'innbucks';
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final user = context.read<AuthProvider>().user!;
+    final user     = context.read<AuthProvider>().user!;
     final provider = context.read<PaymentProvider>();
 
     final result = await provider.initiatePayment(
       gatewayId: widget.gateway,
-      userId: user.userId,
-      phone: _phoneController.text.trim(),
-      email: _emailController.text.trim(),
+      userId:    user.userId,
+      phone:     _phoneController.text.trim(),
+      email:     _emailController.text.trim(),
     );
 
     if (!mounted) return;
@@ -128,7 +112,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
         if (confirmed && mounted) {
           timer.cancel();
-          // Reload user to get updated subscription status
           await context.read<AuthProvider>().checkSession();
           Navigator.pushReplacement(
             context,
@@ -159,7 +142,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Amount banner
+              // ── Amount banner ────────────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -180,16 +163,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             CrossAxisAlignment.start,
                         children: [
                           Text('AgricAssist ZW — Lifetime',
-                              style: AppTextStyles.body
-                                  .copyWith(
-                                      fontWeight:
-                                          FontWeight.w600)),
-                          Text('One-time payment · £2.50',
+                              style: AppTextStyles.body.copyWith(
+                                  fontWeight: FontWeight.w600)),
+                          Text('One-time payment · \$2.99 USD',
                               style: AppTextStyles.caption),
                         ],
                       ),
                     ),
-                    Text('£2.50',
+                    Text('\$2.99',
                         style: AppTextStyles.heading3
                             .copyWith(color: _gatewayColor)),
                   ],
@@ -199,158 +180,72 @@ class _PaymentScreenState extends State<PaymentScreen> {
               const SizedBox(height: 24),
 
               if (provider.isAwaiting) ...[
-                // ── Awaiting confirmation state ──────────
                 _buildAwaitingWidget(),
               ] else ...[
-                // ── Input form ───────────────────────────
-                if (_isMobilePayment) ...[
-                  Text('Mobile Number',
-                      style: AppTextStyles.label),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: _inputDecoration(
-                        'e.g. 0771234567',
-                        Icons.phone_android),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) {
-                        return 'Enter your mobile number';
-                      }
-                      if (v.length < 9) {
-                        return 'Enter a valid Zimbabwe number';
-                      }
-                      return null;
-                    },
+                // ── Mobile number ────────────────────────
+                Text('Mobile Number', style: AppTextStyles.label),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: _inputDecoration(
+                      'e.g. 0771234567', Icons.phone_android),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) {
+                      return 'Enter your mobile number';
+                    }
+                    if (v.length < 9) {
+                      return 'Enter a valid Zimbabwe number';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // ── Email ────────────────────────────────
+                Text('Email Address', style: AppTextStyles.label),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: _inputDecoration(
+                      'your@email.com', Icons.email_outlined),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) {
+                      return 'Enter your email for receipt';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                // ── Info note ────────────────────────────
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.info.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(height: 16),
-                  Text('Email Address',
-                      style: AppTextStyles.label),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: _inputDecoration(
-                        'your@email.com', Icons.email_outlined),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) {
-                        return 'Enter your email for receipt';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.info.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info_outline,
-                            color: AppColors.info, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'A payment prompt will be sent to '
-                            'your $_gatewayLabel number. '
-                            'Enter your PIN to confirm.',
-                            style: AppTextStyles.caption,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  // Stripe card inputs
-                  Text('Card Number',
-                      style: AppTextStyles.label),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _cardController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 19,
-                    decoration: _inputDecoration(
-                        '1234 5678 9012 3456',
-                        Icons.credit_card),
-                    validator: (v) => v == null ||
-                            v.replaceAll(' ', '').length < 16
-                        ? 'Enter valid card number'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
+                  child: Row(
                     children: [
+                      const Icon(Icons.info_outline,
+                          color: AppColors.info, size: 18),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            Text('Expiry',
-                                style: AppTextStyles.label),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _expiryController,
-                              keyboardType:
-                                  TextInputType.number,
-                              maxLength: 5,
-                              decoration: _inputDecoration(
-                                  'MM/YY', Icons.date_range),
-                              validator: (v) =>
-                                  v == null || v.length < 5
-                                      ? 'Invalid'
-                                      : null,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            Text('CVV',
-                                style: AppTextStyles.label),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _cvvController,
-                              keyboardType:
-                                  TextInputType.number,
-                              maxLength: 3,
-                              obscureText: true,
-                              decoration: _inputDecoration(
-                                  '123', Icons.lock_outline),
-                              validator: (v) =>
-                                  v == null || v.length < 3
-                                      ? 'Invalid'
-                                      : null,
-                            ),
-                          ],
+                        child: Text(
+                          widget.gateway == 'ecocash'
+                              ? 'A payment prompt will be sent to your EcoCash number. Enter your PIN to confirm.'
+                              : 'You will receive a ZB Bank payment reference. Complete payment via ZB Bank internet banking or USSD.',
+                          style: AppTextStyles.caption,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text('Email for receipt',
-                      style: AppTextStyles.label),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: _inputDecoration(
-                        'your@email.com',
-                        Icons.email_outlined),
-                    validator: (v) => v == null || v.isEmpty
-                        ? 'Enter your email'
-                        : null,
-                  ),
-                ],
+                ),
 
                 const SizedBox(height: 28),
 
-                // Submit button
+                // ── Submit button ────────────────────────
                 SizedBox(
                   width: double.infinity,
                   height: 52,
@@ -369,12 +264,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             color: Colors.white,
                             strokeWidth: 2)
                         : Text(
-                            'Pay £2.50 via $_gatewayLabel',
-                            style: AppTextStyles.body
-                                .copyWith(
-                                    color: Colors.white,
-                                    fontWeight:
-                                        FontWeight.w700)),
+                            'Pay \$2.99 via $_gatewayLabel',
+                            style: AppTextStyles.body.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -402,8 +295,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border:
-                Border.all(color: AppColors.divider),
+            border: Border.all(color: AppColors.divider),
           ),
           child: Column(
             children: [
@@ -457,8 +349,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(
-      String hint, IconData icon) {
+  InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
       prefixIcon: Icon(icon, color: AppColors.textHint),

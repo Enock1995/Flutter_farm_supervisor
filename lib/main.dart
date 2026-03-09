@@ -46,6 +46,7 @@ import 'providers/input_calculator_provider.dart';
 import 'screens/input_calculator/input_calculator_screen.dart';
 import 'providers/reports_provider.dart';
 import 'screens/reports/reports_screen.dart';
+import 'screens/profile/profile_screen.dart';
 
 
 void main() async {
@@ -138,6 +139,7 @@ class AgricAssistApp extends StatelessWidget {
     '/input-calculator': (context) => const _SubscriptionGate(
     child: InputCalculatorScreen()),
     '/reports': (context) => const _SubscriptionGate(child: ReportsScreen()),
+    '/profile': (context) => const _SubscriptionGate(child: ProfileScreen()),
         },
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const LoginScreen(),

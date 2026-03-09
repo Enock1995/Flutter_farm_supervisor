@@ -451,7 +451,7 @@ class _TrialCard extends StatelessWidget {
           Expanded(
             child: Text(
               '$daysLeft days left in your free trial. '
-              'Upgrade for lifetime access — just £2.50.',
+              'Upgrade for lifetime access — just \$2.99.',
               style: AppTextStyles.bodySmall,
             ),
           ),
