@@ -9,6 +9,7 @@ import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'registration_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -75,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const SizedBox(height: 40),
 
-              // Logo / App name
+              // ── Logo / App name ──────────────────────
               Center(
                 child: Column(
                   children: [
@@ -108,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: AppTextStyles.bodySmall),
               const SizedBox(height: 28),
 
-              // Phone
+              // ── Phone ────────────────────────────────
               CustomTextField(
                 controller: _phoneController,
                 label: 'Phone Number',
@@ -118,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Password
+              // ── Password ─────────────────────────────
               CustomTextField(
                 controller: _passwordController,
                 label: 'Password',
@@ -127,16 +128,42 @@ class _LoginScreenState extends State<LoginScreen> {
                 obscureText: _obscurePassword,
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    _obscurePassword
+                        ? Icons.visibility_off
+                        : Icons.visibility,
                     color: AppColors.textSecondary,
                   ),
                   onPressed: () =>
                       setState(() => _obscurePassword = !_obscurePassword),
                 ),
               ),
-              const SizedBox(height: 32),
 
-              // Login button
+              // ── Forgot password ──────────────────────
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ForgotPasswordScreen()),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 8),
+                  ),
+                  child: Text(
+                    'Forgot Password?',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Login button ─────────────────────────
               Consumer<AuthProvider>(
                 builder: (context, auth, _) => PrimaryButton(
                   label: 'Sign In',
@@ -147,11 +174,12 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Register link
+              // ── Register link ────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text("Don't have an account? ", style: AppTextStyles.body),
+                  Text("Don't have an account? ",
+                      style: AppTextStyles.body),
                   GestureDetector(
                     onTap: () => Navigator.push(
                       context,
@@ -171,11 +199,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 40),
 
-              // Zimbabwe flag footer
+              // ── Footer ───────────────────────────────
               const Center(
                 child: Text(
                   '🇿🇼 Made for Zimbabwean Farmers',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  style: TextStyle(
+                      color: AppColors.textSecondary, fontSize: 12),
                 ),
               ),
             ],

@@ -32,6 +32,8 @@ class AuthService {
     required String province,
     String? email,
     String language = 'en',
+    String? securityQuestion,
+    String? securityAnswer,
   }) async {
     try {
       final normalizedPhone = _normalizePhone(phone);
@@ -59,6 +61,11 @@ class AuthService {
       // Hash password
       final passwordHash = _hashPassword(password);
 
+      // Hash security answer (lowercase, trimmed — not case-sensitive)
+      final securityAnswerHash = securityAnswer != null
+          ? _hashPassword(securityAnswer.trim().toLowerCase())
+          : null;
+
       // Build user
       final now = DateTime.now();
       final trialEnd = now.add(const Duration(days: AppConstants.trialDays));
@@ -76,16 +83,22 @@ class AuthService {
         registeredAt: now,
         trialEndsAt: trialEnd,
         isSubscribed: false,
+        securityQuestion: securityQuestion,
+        securityAnswerHash: securityAnswerHash,
       );
 
       // Save to SQLite
       await _db.insertUser(newUser);
 
-      // Save password hash separately
+      // Save password hash + security fields
       final db = await _db.database;
       await db.update(
         'users',
-        {'password_hash': passwordHash},
+        {
+          'password_hash': passwordHash,
+          'security_question': securityQuestion,
+          'security_answer_hash': securityAnswerHash,
+        },
         where: 'user_id = ?',
         whereArgs: [newUser.userId],
       );
@@ -111,14 +124,12 @@ class AuthService {
     try {
       final normalizedPhone = _normalizePhone(phone);
 
-      // Look up user locally
       final user = await _db.getUserByPhone(normalizedPhone);
       if (user == null) {
         return LoginResult.failure(
             'Phone number not registered. Please create an account first.');
       }
 
-      // Verify password against stored hash
       final passwordHash = _hashPassword(password);
       final db = await _db.database;
       final result = await db.query(
@@ -132,7 +143,6 @@ class AuthService {
         return LoginResult.failure('Incorrect password. Please try again.');
       }
 
-      // Save session
       _currentUser = user;
       await _saveSession(user.userId);
 
@@ -176,13 +186,71 @@ class AuthService {
   }
 
   // ---------------------------------------------------------------------------
+  // PASSWORD RESET — SECURITY QUESTION FLOW
+  // ---------------------------------------------------------------------------
+
+  /// Returns the security question stored for a phone number, or null if not found.
+  Future<String?> getSecurityQuestion(String phone) async {
+    try {
+      final normalizedPhone = _normalizePhone(phone);
+      final db = await _db.database;
+      final rows = await db.query(
+        'users',
+        columns: ['security_question'],
+        where: 'phone = ?',
+        whereArgs: [normalizedPhone],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return rows.first['security_question'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Returns true if the provided answer matches the stored hash for that phone.
+  Future<bool> verifySecurityAnswer(String phone, String answer) async {
+    try {
+      final normalizedPhone = _normalizePhone(phone);
+      final answerHash = _hashPassword(answer.trim().toLowerCase());
+      final db = await _db.database;
+      final rows = await db.query(
+        'users',
+        columns: ['id'],
+        where: 'phone = ? AND security_answer_hash = ?',
+        whereArgs: [normalizedPhone, answerHash],
+        limit: 1,
+      );
+      return rows.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Resets the password for the given phone number after security answer verified.
+  Future<bool> resetPassword(String phone, String newPassword) async {
+    try {
+      final normalizedPhone = _normalizePhone(phone);
+      final newHash = _hashPassword(newPassword);
+      final db = await _db.database;
+      final count = await db.update(
+        'users',
+        {'password_hash': newHash},
+        where: 'phone = ?',
+        whereArgs: [normalizedPhone],
+      );
+      return count > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // PUBLIC HELPERS — used by AuthProvider
   // ---------------------------------------------------------------------------
 
-  /// Exposes password hashing so AuthProvider can verify/update passwords.
   String hashPassword(String password) => _hashPassword(password);
 
-  /// Exposes the raw database so AuthProvider can perform direct updates.
   Future<dynamic> getDatabase() => _db.database;
 
   // ---------------------------------------------------------------------------
@@ -190,13 +258,11 @@ class AuthService {
   // ---------------------------------------------------------------------------
   Future<_RegionResult> _resolveRegion(
       String district, String province) async {
-    // Check hardcoded master map
     final region = ZimbabweDistricts.getRegion(district);
     if (region != null) {
       return _RegionResult(region: region, isResolved: true);
     }
 
-    // Check locally learned districts
     final learned = await _db.getLearnedDistrict(district);
     if (learned != null) {
       return _RegionResult(
@@ -226,8 +292,8 @@ class AuthService {
   // ---------------------------------------------------------------------------
   // PRIVATE HELPERS
   // ---------------------------------------------------------------------------
-  String _hashPassword(String password) {
-    final bytes = utf8.encode(password);
+  String _hashPassword(String input) {
+    final bytes = utf8.encode(input);
     final digest = sha256.convert(bytes);
     return digest.toString();
   }
@@ -244,12 +310,6 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(AppConstants.keyIsLoggedIn, true);
     await prefs.setString(AppConstants.keyUserId, userId);
-  }
-
-  // Backend sync — disabled until server is ready
-  Future<void> _syncRegistrationToBackend(
-      UserModel user, String passwordHash) async {
-    return;
   }
 }
 

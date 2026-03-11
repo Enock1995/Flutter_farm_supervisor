@@ -77,7 +77,6 @@ class _DashboardScreenState
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
                 children: [
-                  // Connectivity banner
                   if (!isOnline) ...[
                     _OfflineBanner(),
                     const SizedBox(height: 12),
@@ -85,31 +84,355 @@ class _DashboardScreenState
 
                   _WelcomeCard(user: user),
                   const SizedBox(height: 16),
-                  _RegionCard(
-                      region: user.agroRegion),
+                  _RegionCard(region: user.agroRegion),
                   const SizedBox(height: 16),
                   _FarmSummaryCard(),
                   const SizedBox(height: 16),
 
-                  // Trial banner — only if not subscribed
-                  // and trial not yet expired
                   if (!user.isSubscribed &&
-                      SubscriptionService
-                          .isTrialActive(user)) ...[
+                      SubscriptionService.isTrialActive(user)) ...[
                     _TrialCard(user: user),
                     const SizedBox(height: 16),
                   ],
 
+                  // ── Core Modules ─────────────────────
                   Text('Your Modules',
                       style: AppTextStyles.heading3),
                   const SizedBox(height: 12),
                   const _ModuleGrid(),
+                  const SizedBox(height: 24),
+
+                  // ── Premium sections ─────────────────
+                  _PremiumSectionHeader(
+                    icon: '🤖',
+                    title: 'AI-Powered Features',
+                    subtitle: 'Smart diagnosis, prediction & advisory',
+                  ),
+                  const SizedBox(height: 12),
+                  _PremiumModuleGrid(modules: _aiModules),
+                  const SizedBox(height: 24),
+
+                  _PremiumSectionHeader(
+                    icon: '📊',
+                    title: 'Analytics & Reporting',
+                    subtitle: 'Advanced insights and automated reports',
+                  ),
+                  const SizedBox(height: 12),
+                  _PremiumModuleGrid(modules: _analyticsModules),
+                  const SizedBox(height: 24),
+
+                  _PremiumSectionHeader(
+                    icon: '👷',
+                    title: 'Remote Farm Management',
+                    subtitle: 'Manage workers and farms from anywhere',
+                  ),
+                  const SizedBox(height: 12),
+                  _PremiumModuleGrid(modules: _farmManagementModules),
+                  const SizedBox(height: 24),
+
+                  _PremiumSectionHeader(
+                    icon: '🌿',
+                    title: 'AGRITEX Mudhumeni Network',
+                    subtitle: 'Extension officer knowledge network',
+                  ),
+                  const SizedBox(height: 12),
+                  _PremiumModuleGrid(modules: _agritexModules),
+                  const SizedBox(height: 24),
+
+                  _PremiumSectionHeader(
+                    icon: '🌦️',
+                    title: 'Smart Environmental Monitoring',
+                    subtitle: 'Hyperlocal alerts and smart irrigation',
+                  ),
+                  const SizedBox(height: 12),
+                  _PremiumModuleGrid(modules: _environmentModules),
+                  const SizedBox(height: 24),
+
+                  _PremiumSectionHeader(
+                    icon: '💰',
+                    title: 'Financial Tools',
+                    subtitle: 'Cost tracking, loans and market analysis',
+                  ),
+                  const SizedBox(height: 12),
+                  _PremiumModuleGrid(modules: _financialModules),
+                  const SizedBox(height: 24),
+
+                  _PremiumSectionHeader(
+                    icon: '🗺️',
+                    title: 'Field & Inventory Management',
+                    subtitle: 'GPS mapping, stock and livestock health',
+                  ),
+                  const SizedBox(height: 12),
+                  _PremiumModuleGrid(modules: _fieldModules),
                   const SizedBox(height: 30),
                 ],
               ),
             ),
     );
   }
+}
+
+// ── Premium module data ───────────────────────────────────
+
+final _aiModules = [
+  _Module(
+    icon: Icons.medical_services_outlined,
+    label: 'AI Crop &\nLivestock Diagnosis',
+    color: const Color(0xFF7B2D8B),
+    route: '/ai-diagnosis',
+    isBuilt: true,
+  ),
+  _Module(
+    icon: Icons.trending_up,
+    label: 'AI Yield\nPrediction',
+    color: const Color(0xFF7B2D8B),
+    route: '/ai-yield',
+    isBuilt: true,
+  ),
+  _Module(
+    icon: Icons.smart_toy_outlined,
+    label: 'AI Farm\nAdvisory Chat',
+    color: const Color(0xFF7B2D8B),
+    route: '/ai-chat',
+    isBuilt: true,
+  ),
+];
+
+final _analyticsModules = [
+  _Module(
+    icon: Icons.bar_chart_outlined,
+    label: 'Advanced\nAnalytics',
+    color: const Color(0xFF1565C0),
+    route: '/analytics',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.summarize_outlined,
+    label: 'Auto PDF/Excel\nReports',
+    color: const Color(0xFF1565C0),
+    route: '/auto-reports',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.corporate_fare_outlined,
+    label: 'Multi-Farm\nManagement',
+    color: const Color(0xFF1565C0),
+    route: '/multi-farm',
+    isBuilt: false,
+  ),
+];
+
+final _farmManagementModules = [
+  _Module(
+    icon: Icons.add_location_alt_outlined,
+    label: 'Farm\nRegistration',
+    color: const Color(0xFF2E7D32),
+    route: '/farm-registration',
+    isBuilt: true,
+  ),
+  _Module(
+    icon: Icons.group_add_outlined,
+    label: 'Worker\nOnboarding',
+    color: const Color(0xFF2E7D32),
+    route: '/worker-onboarding',
+    isBuilt: true,
+  ),
+  _Module(
+    icon: Icons.location_on_outlined,
+    label: 'GPS\nClock-In/Out',
+    color: const Color(0xFF2E7D32),
+    route: '/gps-clockin',
+    isBuilt: true,
+  ),
+  _Module(
+    icon: Icons.assignment_outlined,
+    label: 'Remote Task\nAssignment',
+    color: const Color(0xFF2E7D32),
+    route: '/task-assignment',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.dynamic_feed_outlined,
+    label: 'Farm Activity\nFeed',
+    color: const Color(0xFF2E7D32),
+    route: '/activity-feed',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.payments_outlined,
+    label: 'Payroll &\nEcoCash Payout',
+    color: const Color(0xFF2E7D32),
+    route: '/payroll',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.leaderboard_outlined,
+    label: 'Worker\nPerformance',
+    color: const Color(0xFF2E7D32),
+    route: '/worker-performance',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.edit_note_outlined,
+    label: 'Daily Field\nReports',
+    color: const Color(0xFF2E7D32),
+    route: '/field-reports',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.photo_library_outlined,
+    label: 'Farm\nPhoto Diary',
+    color: const Color(0xFF2E7D32),
+    route: '/photo-diary',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.sos_outlined,
+    label: 'Emergency\nSOS Alert',
+    color: const Color(0xFFC62828),
+    route: '/sos-alert',
+    isBuilt: false,
+  ),
+];
+
+final _agritexModules = [
+  _Module(
+    icon: Icons.verified_user_outlined,
+    label: 'Mudhumeni\nRegistration',
+    color: const Color(0xFF558B2F),
+    route: '/mudhumeni-registration',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.map_outlined,
+    label: 'Area & Farmer\nManagement',
+    color: const Color(0xFF558B2F),
+    route: '/area-management',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.campaign_outlined,
+    label: 'Knowledge\nPosts & Alerts',
+    color: const Color(0xFF558B2F),
+    route: '/knowledge-posts',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.forum_outlined,
+    label: 'Public\nQ&A',
+    color: const Color(0xFF558B2F),
+    route: '/public-qa',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.lock_outline,
+    label: 'Private\nQ&A',
+    color: const Color(0xFF558B2F),
+    route: '/private-qa',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.groups_outlined,
+    label: 'Farmer\nCommunity',
+    color: const Color(0xFF558B2F),
+    route: '/community',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.event_available_outlined,
+    label: 'Field Visit\nScheduler',
+    color: const Color(0xFF558B2F),
+    route: '/field-visits',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.calendar_today_outlined,
+    label: 'Seasonal\nCrop Calendar',
+    color: const Color(0xFF558B2F),
+    route: '/seasonal-calendar',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.bubble_chart_outlined,
+    label: 'Problem\nHeatmap',
+    color: const Color(0xFF558B2F),
+    route: '/problem-heatmap',
+    isBuilt: false,
+  ),
+];
+
+final _environmentModules = [
+  _Module(
+    icon: Icons.notifications_active_outlined,
+    label: 'Hyperlocal\nWeather Alerts',
+    color: const Color(0xFF0277BD),
+    route: '/weather-alerts',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.schedule_outlined,
+    label: 'Irrigation\nScheduling',
+    color: const Color(0xFF0277BD),
+    route: '/irrigation-scheduling',
+    isBuilt: false,
+  ),
+];
+
+final _financialModules = [
+  _Module(
+    icon: Icons.price_change_outlined,
+    label: 'Input Cost vs\nMarket Price',
+    color: const Color(0xFFE65100),
+    route: '/cost-market',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.account_balance_outlined,
+    label: 'Loan & Credit\nManager',
+    color: const Color(0xFFE65100),
+    route: '/loan-manager',
+    isBuilt: false,
+  ),
+];
+
+final _fieldModules = [
+  _Module(
+    icon: Icons.satellite_alt_outlined,
+    label: 'GPS Field\nMapping',
+    color: const Color(0xFF4E342E),
+    route: '/gps-mapping',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.inventory_2_outlined,
+    label: 'Input Inventory\nTracker',
+    color: const Color(0xFF4E342E),
+    route: '/inventory',
+    isBuilt: false,
+  ),
+  _Module(
+    icon: Icons.vaccines_outlined,
+    label: 'Livestock Health\nRecords',
+    color: const Color(0xFF4E342E),
+    route: '/livestock-health',
+    isBuilt: false,
+  ),
+];
+
+// ── Module data class ─────────────────────────────────────
+class _Module {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final String route;
+  final bool isBuilt;
+  const _Module({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.route,
+    this.isBuilt = false,
+  });
 }
 
 // ── Offline banner ────────────────────────────────────────
@@ -135,8 +458,8 @@ class _OfflineBanner extends StatelessWidget {
             child: Text(
               'You are offline. All data saved locally '
               '— reconnect for live weather and market prices.',
-              style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.warning),
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.warning),
             ),
           ),
         ],
@@ -162,10 +485,7 @@ class _WelcomeCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [
-              AppColors.primaryDark,
-              AppColors.primary
-            ],
+            colors: [AppColors.primaryDark, AppColors.primary],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -193,23 +513,19 @@ class _WelcomeCard extends StatelessWidget {
             const SizedBox(width: 14),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Mhoro! 👋',
                       style: AppTextStyles.bodySmall
-                          .copyWith(
-                              color: Colors.white70)),
+                          .copyWith(color: Colors.white70)),
                   Text(user.fullName,
                       style: AppTextStyles.heading3
-                          .copyWith(
-                              color: Colors.white)),
+                          .copyWith(color: Colors.white)),
                   const SizedBox(height: 2),
                   Text(
                     '${user.userId}  •  ${user.district}',
                     style: AppTextStyles.caption
-                        .copyWith(
-                            color: Colors.white60),
+                        .copyWith(color: Colors.white60),
                   ),
                 ],
               ),
@@ -242,8 +558,7 @@ class _RegionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,14 +570,12 @@ class _RegionCard extends StatelessWidget {
                     horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: color,
-                  borderRadius:
-                      BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text('Region $region',
                     style: const TextStyle(
                         color: Colors.white,
-                        fontWeight:
-                            FontWeight.w700)),
+                        fontWeight: FontWeight.w700)),
               ),
               const SizedBox(width: 10),
               Text('Your Agro-Ecological Zone',
@@ -270,14 +583,12 @@ class _RegionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(description,
-              style: AppTextStyles.bodySmall),
+          Text(description, style: AppTextStyles.bodySmall),
           const SizedBox(height: 8),
           Text(
             'Recommended: ${crops.take(4).join(', ')}',
             style: AppTextStyles.body.copyWith(
-                color: color,
-                fontWeight: FontWeight.w500),
+                color: color, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -294,18 +605,15 @@ class _FarmSummaryCard extends StatelessWidget {
         final profile = provider.farmProfile;
         if (profile == null) {
           return GestureDetector(
-            onTap: () => Navigator.pushNamed(
-                context, '/farm-profile'),
+            onTap: () =>
+                Navigator.pushNamed(context, '/farm-profile'),
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.accent
-                    .withOpacity(0.08),
-                borderRadius:
-                    BorderRadius.circular(12),
+                color: AppColors.accent.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: AppColors.accent
-                        .withOpacity(0.3)),
+                    color: AppColors.accent.withOpacity(0.3)),
               ),
               child: Row(
                 children: [
@@ -329,34 +637,28 @@ class _FarmSummaryCard extends StatelessWidget {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (_) =>
-                    const ProfileScreen()),
+                builder: (_) => const ProfileScreen()),
           ),
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: AppColors.divider),
+              border: Border.all(color: AppColors.divider),
             ),
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment:
                       MainAxisAlignment.spaceBetween,
                   children: [
                     Text('My Farm',
-                        style:
-                            AppTextStyles.heading3),
+                        style: AppTextStyles.heading3),
                     Text('View profile →',
-                        style:
-                            AppTextStyles.bodySmall
-                                .copyWith(
-                                    color: AppColors
-                                        .primary)),
+                        style: AppTextStyles.bodySmall
+                            .copyWith(
+                                color: AppColors.primary)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -410,15 +712,13 @@ class _FarmStat extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Icon(icon,
-                color: AppColors.primary, size: 20),
+            Icon(icon, color: AppColors.primary, size: 20),
             const SizedBox(height: 4),
             Text(value,
                 style: AppTextStyles.body.copyWith(
                     fontWeight: FontWeight.w700,
                     color: AppColors.primary)),
-            Text(label,
-                style: AppTextStyles.caption),
+            Text(label, style: AppTextStyles.caption),
           ],
         ),
       ),
@@ -466,124 +766,174 @@ class _TrialCard extends StatelessWidget {
   }
 }
 
-// ── Module grid ───────────────────────────────────────────
+// ── Premium section header ────────────────────────────────
+class _PremiumSectionHeader extends StatelessWidget {
+  final String icon;
+  final String title;
+  final String subtitle;
+  const _PremiumSectionHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(icon, style: const TextStyle(fontSize: 22)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: AppTextStyles.heading3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7B2D8B)
+                          .withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: const Color(0xFF7B2D8B)
+                              .withOpacity(0.3)),
+                    ),
+                    child: const Text('👑 Premium',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF7B2D8B))),
+                  ),
+                ],
+              ),
+              Text(subtitle,
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Core module grid ──────────────────────────────────────
 class _ModuleGrid extends StatelessWidget {
   const _ModuleGrid();
 
   @override
   Widget build(BuildContext context) {
-    // ready: true  = built and navigable
-    // ready: false = coming soon (shows snackbar + "soon" badge)
     final modules = [
-      // ── Row 1: Core farm management ──────────────
       {
-        'icon':  Icons.eco,
+        'icon': Icons.eco,
         'label': 'Crop\nManagement',
         'color': AppColors.primary,
         'route': '/crops',
         'ready': true,
       },
       {
-        'icon':  Icons.pets,
+        'icon': Icons.pets,
         'label': 'Livestock',
         'color': AppColors.earth,
         'route': '/livestock',
         'ready': true,
       },
       {
-        'icon':  Icons.local_florist_outlined,
+        'icon': Icons.local_florist_outlined,
         'label': 'Horticulture',
         'color': AppColors.primaryLight,
         'route': '/horticulture',
         'ready': true,
       },
-
-      // ── Row 2: Intelligence & market ─────────────
       {
-        'icon':  Icons.wb_sunny_outlined,
+        'icon': Icons.wb_sunny_outlined,
         'label': 'Weather',
         'color': AppColors.accent,
         'route': '/weather',
         'ready': true,
       },
       {
-        'icon':  Icons.storefront_outlined,
+        'icon': Icons.storefront_outlined,
         'label': 'Market\nPrices',
         'color': AppColors.earth,
         'route': '/market',
         'ready': true,
       },
       {
-        'icon':  Icons.newspaper_outlined,
+        'icon': Icons.newspaper_outlined,
         'label': 'Agri News',
         'color': AppColors.info,
         'route': '/news',
         'ready': true,
       },
-
-      // ── Row 3: Farm operations ────────────────────
       {
-        'icon':  Icons.account_balance_wallet_outlined,
+        'icon': Icons.account_balance_wallet_outlined,
         'label': 'Finances',
         'color': AppColors.info,
         'route': '/finances',
         'ready': true,
       },
       {
-        'icon':  Icons.calendar_month_outlined,
+        'icon': Icons.calendar_month_outlined,
         'label': 'Farm\nCalendar',
         'color': AppColors.primaryDark,
         'route': '/calendar',
         'ready': true,
       },
       {
-        'icon':  Icons.people_outline,
+        'icon': Icons.people_outline,
         'label': 'Labour\nTracker',
         'color': AppColors.earthLight,
         'route': '/labour',
         'ready': true,
       },
-
-      // ── Row 4: Advisory tools ─────────────────────
       {
-        'icon':  Icons.bug_report_outlined,
+        'icon': Icons.bug_report_outlined,
         'label': 'Pest &\nDisease',
         'color': AppColors.error,
         'route': '/pest-disease',
         'ready': true,
       },
       {
-        'icon':  Icons.water_drop_outlined,
+        'icon': Icons.water_drop_outlined,
         'label': 'Irrigation\nManager',
         'color': AppColors.info,
         'route': '/irrigation',
         'ready': true,
       },
       {
-        'icon':  Icons.layers_outlined,
+        'icon': Icons.layers_outlined,
         'label': 'Soil\nManagement',
         'color': AppColors.earth,
         'route': '/soil',
         'ready': true,
       },
-
-      // ── Row 5: Productivity ───────────────────────
       {
-        'icon':  Icons.calculate_outlined,
+        'icon': Icons.calculate_outlined,
         'label': 'Input\nCalculator',
         'color': AppColors.success,
         'route': '/input-calculator',
         'ready': true,
       },
       {
-        'icon':  Icons.picture_as_pdf_outlined,
+        'icon': Icons.picture_as_pdf_outlined,
         'label': 'Reports\n& Export',
         'color': AppColors.primaryLight,
         'route': '/reports',
         'ready': true,
       },
       {
-        'icon':  Icons.menu_book_outlined,
+        'icon': Icons.menu_book_outlined,
         'label': 'Knowledge\nBase',
         'color': AppColors.earthLight,
         'route': '/knowledge-base',
@@ -603,9 +953,9 @@ class _ModuleGrid extends StatelessWidget {
       ),
       itemCount: modules.length,
       itemBuilder: (context, index) {
-        final m       = modules[index];
-        final color   = m['color'] as Color;
-        final route   = m['route'] as String;
+        final m = modules[index];
+        final color = m['color'] as Color;
+        final route = m['route'] as String;
         final isReady = m['ready'] as bool;
 
         return GestureDetector(
@@ -613,8 +963,7 @@ class _ModuleGrid extends StatelessWidget {
             if (isReady) {
               Navigator.pushNamed(context, route);
             } else {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(
+              ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
                     '${(m['label'] as String).replaceAll('\n', ' ')} — coming soon!',
@@ -627,29 +976,107 @@ class _ModuleGrid extends StatelessWidget {
           },
           child: Container(
             decoration: BoxDecoration(
-              color: isReady
-                  ? Colors.white
-                  : AppColors.background,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              boxShadow: isReady
-                  ? const [
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 6,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.12),
+                      borderRadius:
+                          BorderRadius.circular(12),
+                    ),
+                    child: Icon(m['icon'] as IconData,
+                        color: color, size: 26),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    m['label'] as String,
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Premium module grid ───────────────────────────────────
+class _PremiumModuleGrid extends StatelessWidget {
+  final List<_Module> modules;
+  const _PremiumModuleGrid({required this.modules});
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate:
+          const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.9,
+      ),
+      itemCount: modules.length,
+      itemBuilder: (context, index) {
+        final m = modules[index];
+
+        return GestureDetector(
+          onTap: () {
+            if (m.isBuilt) {
+              Navigator.pushNamed(context, m.route);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '${m.label.replaceAll('\n', ' ')} — coming soon!',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: m.isBuilt ? Colors.white : AppColors.background,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: m.color.withOpacity(m.isBuilt ? 0.4 : 0.2),
+                width: m.isBuilt ? 1.5 : 1,
+              ),
+              boxShadow: m.isBuilt
+                  ? [
                       BoxShadow(
-                        color: Colors.black12,
+                        color: m.color.withOpacity(0.12),
                         blurRadius: 6,
-                        offset: Offset(0, 2),
-                      ),
+                        offset: const Offset(0, 2),
+                      )
                     ]
                   : null,
-              border: isReady
-                  ? null
-                  : Border.all(
-                      color: AppColors.divider,
-                      width: 1,
-                    ),
             ),
             child: Stack(
               children: [
-                // Module content
                 Center(
                   child: Column(
                     mainAxisAlignment:
@@ -659,30 +1086,26 @@ class _ModuleGrid extends StatelessWidget {
                         width: 48,
                         height: 48,
                         decoration: BoxDecoration(
-                          color: isReady
-                              ? color.withOpacity(0.12)
-                              : color.withOpacity(0.06),
+                          color: m.color.withOpacity(
+                              m.isBuilt ? 0.12 : 0.07),
                           borderRadius:
                               BorderRadius.circular(12),
                         ),
-                        child: Icon(
-                          m['icon'] as IconData,
-                          color: isReady
-                              ? color
-                              : color.withOpacity(0.35),
-                          size: 26,
-                        ),
+                        child: Icon(m.icon,
+                            color: m.color.withOpacity(
+                                m.isBuilt ? 1.0 : 0.45),
+                            size: 26),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        m['label'] as String,
+                        m.label,
                         textAlign: TextAlign.center,
                         style: AppTextStyles.caption
                             .copyWith(
-                          color: isReady
+                          color: m.isBuilt
                               ? AppColors.textPrimary
                               : AppColors.textHint,
-                          fontWeight: isReady
+                          fontWeight: m.isBuilt
                               ? FontWeight.w600
                               : FontWeight.w400,
                         ),
@@ -690,33 +1113,26 @@ class _ModuleGrid extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // "soon" badge — top-right on unbuilt modules
-                if (!isReady)
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.textHint
-                            .withOpacity(0.14),
-                        borderRadius:
-                            BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'soon',
-                        style: AppTextStyles.caption
-                            .copyWith(
-                          fontSize: 9,
-                          color: AppColors.textHint,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                Positioned(
+                  top: 5,
+                  right: 5,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: m.isBuilt
+                          ? AppColors.success.withOpacity(0.12)
+                          : const Color(0xFF7B2D8B)
+                              .withOpacity(0.12),
+                      borderRadius:
+                          BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      m.isBuilt ? '✅' : '👑',
+                      style: const TextStyle(fontSize: 9),
                     ),
                   ),
+                ),
               ],
             ),
           ),

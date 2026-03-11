@@ -2,19 +2,30 @@
 // Represents a registered farmer in the AgricAssist ZW system.
 
 class UserModel {
-  final String id;           // Internal DB id
-  final String userId;       // Public ID: ZW-HAR-000001
+  final String id;
+  final String userId;
   final String fullName;
-  final String phone;        // Primary contact (also used as username)
-  final String? email;       // Optional
+  final String phone;
+  final String? email;
   final String district;
   final String province;
-  final String agroRegion;   // I, IIa, IIb, III, IV, V
-  final String language;     // en, sn, nd
+  final String agroRegion;
+  final String language;
   final DateTime registeredAt;
   final DateTime trialEndsAt;
+
+  // Base subscription ($2.99 one-time — unlocks 15 core modules forever)
   final bool isSubscribed;
   final DateTime? subscribedAt;
+
+  // Premium subscription ($1.99 / 60 days — unlocks premium modules)
+  final bool isPremiumSubscribed;
+  final DateTime? premiumExpiresAt;
+
+  // Password reset via security question
+  final String? securityQuestion;
+  final String? securityAnswerHash;
+
   final FarmProfile? farmProfile;
 
   const UserModel({
@@ -31,26 +42,42 @@ class UserModel {
     required this.trialEndsAt,
     this.isSubscribed = false,
     this.subscribedAt,
+    this.isPremiumSubscribed = false,
+    this.premiumExpiresAt,
+    this.securityQuestion,
+    this.securityAnswerHash,
     this.farmProfile,
   });
 
-  // Is the user currently active (on trial or subscribed)?
+  // Core access = subscribed (base) OR trial still active
   bool get isActive {
     if (isSubscribed) return true;
     return DateTime.now().isBefore(trialEndsAt);
   }
 
-  // Days remaining in trial
+  // Premium access = premium subscribed AND not yet expired
+  bool get hasPremiumAccess {
+    if (!isPremiumSubscribed) return false;
+    if (premiumExpiresAt == null) return false;
+    return DateTime.now().isBefore(premiumExpiresAt!);
+  }
+
+  // Days until premium expires (0 if expired/not subscribed)
+  int get premiumDaysRemaining {
+    if (!hasPremiumAccess) return 0;
+    final remaining = premiumExpiresAt!.difference(DateTime.now()).inDays;
+    return remaining < 0 ? 0 : remaining;
+  }
+
   int get trialDaysRemaining {
     if (isSubscribed) return 0;
     final remaining = trialEndsAt.difference(DateTime.now()).inDays;
     return remaining < 0 ? 0 : remaining;
   }
 
-  // Is trial expired and not subscribed?
-  bool get needsSubscription => !isSubscribed && DateTime.now().isAfter(trialEndsAt);
+  bool get needsSubscription =>
+      !isSubscribed && DateTime.now().isAfter(trialEndsAt);
 
-  // Convert to Map for SQLite storage
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -66,10 +93,13 @@ class UserModel {
       'trial_ends_at': trialEndsAt.toIso8601String(),
       'is_subscribed': isSubscribed ? 1 : 0,
       'subscribed_at': subscribedAt?.toIso8601String(),
+      'is_premium_subscribed': isPremiumSubscribed ? 1 : 0,
+      'premium_expires_at': premiumExpiresAt?.toIso8601String(),
+      'security_question': securityQuestion,
+      'security_answer_hash': securityAnswerHash,
     };
   }
 
-  // Create from SQLite Map
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       id: map['id'],
@@ -87,10 +117,15 @@ class UserModel {
       subscribedAt: map['subscribed_at'] != null
           ? DateTime.parse(map['subscribed_at'])
           : null,
+      isPremiumSubscribed: (map['is_premium_subscribed'] ?? 0) == 1,
+      premiumExpiresAt: map['premium_expires_at'] != null
+          ? DateTime.parse(map['premium_expires_at'])
+          : null,
+      securityQuestion: map['security_question'],
+      securityAnswerHash: map['security_answer_hash'],
     );
   }
 
-  // Create a copy with updated fields
   UserModel copyWith({
     String? fullName,
     String? phone,
@@ -98,6 +133,10 @@ class UserModel {
     String? language,
     bool? isSubscribed,
     DateTime? subscribedAt,
+    bool? isPremiumSubscribed,
+    DateTime? premiumExpiresAt,
+    String? securityQuestion,
+    String? securityAnswerHash,
     FarmProfile? farmProfile,
   }) {
     return UserModel(
@@ -114,6 +153,10 @@ class UserModel {
       trialEndsAt: trialEndsAt,
       isSubscribed: isSubscribed ?? this.isSubscribed,
       subscribedAt: subscribedAt ?? this.subscribedAt,
+      isPremiumSubscribed: isPremiumSubscribed ?? this.isPremiumSubscribed,
+      premiumExpiresAt: premiumExpiresAt ?? this.premiumExpiresAt,
+      securityQuestion: securityQuestion ?? this.securityQuestion,
+      securityAnswerHash: securityAnswerHash ?? this.securityAnswerHash,
       farmProfile: farmProfile ?? this.farmProfile,
     );
   }
@@ -128,11 +171,11 @@ class UserModel {
 class FarmProfile {
   final String userId;
   final double farmSizeHectares;
-  final String farmSizeCategory; // small (<5ha), medium (5-50ha), large (>50ha)
+  final String farmSizeCategory;
   final List<String> crops;
   final List<String> livestock;
-  final String soilType;         // sandy, clay, loam, sandy-loam
-  final String waterSource;      // borehole, river, dam, rain-fed, irrigation
+  final String soilType;
+  final String waterSource;
   final bool hasIrrigation;
   final DateTime updatedAt;
 
@@ -167,8 +210,14 @@ class FarmProfile {
       userId: map['user_id'],
       farmSizeHectares: (map['farm_size_hectares'] as num).toDouble(),
       farmSizeCategory: map['farm_size_category'],
-      crops: (map['crops'] as String).split(',').where((c) => c.isNotEmpty).toList(),
-      livestock: (map['livestock'] as String).split(',').where((l) => l.isNotEmpty).toList(),
+      crops: (map['crops'] as String)
+          .split(',')
+          .where((c) => c.isNotEmpty)
+          .toList(),
+      livestock: (map['livestock'] as String)
+          .split(',')
+          .where((l) => l.isNotEmpty)
+          .toList(),
       soilType: map['soil_type'],
       waterSource: map['water_source'],
       hasIrrigation: map['has_irrigation'] == 1,
@@ -184,7 +233,7 @@ class FarmProfile {
 }
 
 // ---------------------------------------------------------------------------
-// UNKNOWN DISTRICT MODEL (for learning new districts)
+// UNKNOWN DISTRICT MODEL
 // ---------------------------------------------------------------------------
 class UnknownDistrict {
   final String id;
@@ -192,7 +241,7 @@ class UnknownDistrict {
   final String? provinceSuggested;
   final String submittedByUserId;
   final DateTime submittedAt;
-  final String status; // 'pending', 'approved', 'rejected'
+  final String status;
 
   const UnknownDistrict({
     required this.id,

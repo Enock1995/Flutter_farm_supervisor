@@ -1,13 +1,12 @@
 // lib/providers/auth_provider.dart
-// Bridges AuthService with the UI using Provider state management.
-// Any widget in the tree can listen to auth state changes via this provider.
 
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/database_service.dart';
 
 enum AuthStatus {
-  initial,      // App just started, checking session
+  initial,
   authenticated,
   unauthenticated,
   loading,
@@ -20,7 +19,6 @@ class AuthProvider extends ChangeNotifier {
   UserModel? _user;
   String? _errorMessage;
 
-  // Getters (UI reads these)
   AuthStatus get status => _status;
   UserModel? get user => _user;
   String? get errorMessage => _errorMessage;
@@ -28,21 +26,18 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _status == AuthStatus.authenticated;
 
   // ---------------------------------------------------------------------------
-  // CHECK SESSION ON APP START
+  // CHECK SESSION
   // ---------------------------------------------------------------------------
   Future<void> checkSession() async {
     _status = AuthStatus.initial;
     notifyListeners();
-
     final user = await _authService.restoreSession();
-
     if (user != null) {
       _user = user;
       _status = AuthStatus.authenticated;
     } else {
       _status = AuthStatus.unauthenticated;
     }
-
     notifyListeners();
   }
 
@@ -57,6 +52,8 @@ class AuthProvider extends ChangeNotifier {
     required String province,
     String? email,
     String language = 'en',
+    String? securityQuestion,
+    String? securityAnswer,
   }) async {
     _setLoading();
 
@@ -68,6 +65,8 @@ class AuthProvider extends ChangeNotifier {
       province: province,
       email: email,
       language: language,
+      securityQuestion: securityQuestion,
+      securityAnswer: securityAnswer,
     );
 
     if (result.isSuccess) {
@@ -92,7 +91,8 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     _setLoading();
 
-    final result = await _authService.login(phone: phone, password: password);
+    final result =
+        await _authService.login(phone: phone, password: password);
 
     if (result.isSuccess) {
       _user = result.user;
@@ -119,15 +119,53 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // CLEAR ERROR
+  // ACTIVATE BASE SUBSCRIPTION ($2.99 one-time)
   // ---------------------------------------------------------------------------
-  void clearError() {
-    _errorMessage = null;
+  Future<void> activateBaseSubscription() async {
+    if (_user == null) return;
+    await DatabaseService().updateSubscription(_user!.userId, true);
+    _user = _user!.copyWith(
+      isSubscribed: true,
+      subscribedAt: DateTime.now(),
+    );
     notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
-  // UPDATE FULL NAME
+  // ACTIVATE PREMIUM SUBSCRIPTION ($1.99 / 60 days)
+  // ---------------------------------------------------------------------------
+  Future<void> activatePremiumSubscription() async {
+    if (_user == null) return;
+    await DatabaseService().activatePremium(_user!.userId);
+    _user = _user!.copyWith(
+      isPremiumSubscribed: true,
+      premiumExpiresAt:
+          DateTime.now().add(const Duration(days: 60)),
+    );
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // PASSWORD RESET — verify security answer
+  // ---------------------------------------------------------------------------
+  /// Returns the security question for a phone number, or null if not found.
+  Future<String?> getSecurityQuestion(String phone) async {
+    return await _authService.getSecurityQuestion(phone);
+  }
+
+  /// Verifies the security answer. Returns true if correct.
+  Future<bool> verifySecurityAnswer(
+      String phone, String answer) async {
+    return await _authService.verifySecurityAnswer(phone, answer);
+  }
+
+  /// Resets password after security answer verified.
+  Future<bool> resetPassword(String phone, String newPassword) async {
+    return await _authService.resetPassword(phone, newPassword);
+  }
+
+  // ---------------------------------------------------------------------------
+  // PROFILE UPDATES
   // ---------------------------------------------------------------------------
   Future<void> updateFullName(String name) async {
     final db = await _authService.getDatabase();
@@ -137,9 +175,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------------------------------------------------------------------------
-  // CHANGE PASSWORD
-  // ---------------------------------------------------------------------------
   Future<bool> changePassword(String current, String newPass) async {
     final db = await _authService.getDatabase();
     final hash = _authService.hashPassword(current);
@@ -153,19 +188,18 @@ class AuthProvider extends ChangeNotifier {
     return true;
   }
 
-  // ---------------------------------------------------------------------------
-  // DELETE ACCOUNT
-  // ---------------------------------------------------------------------------
   Future<void> deleteAccount() async {
     final db = await _authService.getDatabase();
     final userId = _user!.userId;
     for (final table in [
       'users', 'farm_profiles', 'crops', 'livestock',
       'finance_records', 'labour_sessions', 'irrigation_setups',
-      'irrigation_logs', 'soil_records', 'farm_alerts', 'saved_calculations'
+      'irrigation_logs', 'soil_records', 'farm_alerts',
+      'saved_calculations'
     ]) {
       try {
-        await db.delete(table, where: 'user_id = ?', whereArgs: [userId]);
+        await db.delete(table,
+            where: 'user_id = ?', whereArgs: [userId]);
       } catch (_) {}
     }
     _user = null;
@@ -173,9 +207,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------------------------------------------------------------------------
-  // INTERNAL
-  // ---------------------------------------------------------------------------
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   void _setLoading() {
     _status = AuthStatus.loading;
     _errorMessage = null;

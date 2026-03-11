@@ -54,6 +54,9 @@ dependencies:
 
   # Open URLs in browser
   url_launcher: ^6.2.5
+  image_picker: ^1.0.7
+  geolocator: ^11.0.0
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:

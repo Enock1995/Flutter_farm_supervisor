@@ -11,15 +11,24 @@ import 'payment_success_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
   final String gateway;
-  const PaymentScreen({super.key, required this.gateway});
+
+  /// true  → activates Premium plan ($1.99 / 60 days)
+  /// false → activates Base plan ($2.99 lifetime)
+  final bool isPremium;
+
+  const PaymentScreen({
+    super.key,
+    required this.gateway,
+    this.isPremium = false,
+  });
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  final _phoneController  = TextEditingController();
-  final _emailController  = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   Timer? _pollTimer;
@@ -44,6 +53,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     super.dispose();
   }
 
+  // ── Labels / colors ───────────────────────────────────
+
   String get _gatewayLabel {
     switch (widget.gateway) {
       case 'ecocash': return 'EcoCash';
@@ -59,6 +70,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
       default:        return AppColors.primary;
     }
   }
+
+  String get _planLabel =>
+      widget.isPremium ? 'Premium Plan' : 'Base Plan — Lifetime';
+
+  String get _amountLabel =>
+      widget.isPremium ? '\$1.99' : '\$2.99';
+
+  String get _amountDescription =>
+      widget.isPremium
+          ? 'Every 2 months · \$1.99 USD'
+          : 'One-time payment · \$2.99 USD';
+
+  // ── Submit payment ────────────────────────────────────
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -84,6 +108,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
       ));
     }
   }
+
+  // ── Poll for confirmation ─────────────────────────────
 
   void _startPolling() {
     _pollCount = 0;
@@ -112,16 +138,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
         if (confirmed && mounted) {
           timer.cancel();
-          await context.read<AuthProvider>().checkSession();
+
+          // Activate the correct subscription tier
+          final auth = context.read<AuthProvider>();
+          if (widget.isPremium) {
+            await auth.activatePremiumSubscription();
+          } else {
+            await auth.activateBaseSubscription();
+          }
+
+          if (!mounted) return;
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-                builder: (_) => const PaymentSuccessScreen()),
+                builder: (_) => PaymentSuccessScreen(
+                      isPremium: widget.isPremium,
+                    )),
           );
         }
       },
     );
   }
+
+  // ── Build ─────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -149,28 +188,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 decoration: BoxDecoration(
                   color: _gatewayColor.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: _gatewayColor.withOpacity(0.3)),
+                  border:
+                      Border.all(color: _gatewayColor.withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.lock_outline,
-                        color: _gatewayColor),
+                    Icon(Icons.lock_outline, color: _gatewayColor),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('AgricAssist ZW — Lifetime',
+                          Text('AgricAssist ZW — $_planLabel',
                               style: AppTextStyles.body.copyWith(
                                   fontWeight: FontWeight.w600)),
-                          Text('One-time payment · \$2.99 USD',
+                          Text(_amountDescription,
                               style: AppTextStyles.caption),
                         ],
                       ),
                     ),
-                    Text('\$2.99',
+                    Text(_amountLabel,
                         style: AppTextStyles.heading3
                             .copyWith(color: _gatewayColor)),
                   ],
@@ -250,21 +287,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed:
-                        provider.isLoading ? null : _submit,
+                    onPressed: provider.isLoading ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _gatewayColor,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     child: provider.isLoading
                         ? const CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2)
+                            color: Colors.white, strokeWidth: 2)
                         : Text(
-                            'Pay \$2.99 via $_gatewayLabel',
+                            'Pay $_amountLabel via $_gatewayLabel',
                             style: AppTextStyles.body.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700)),
@@ -275,7 +309,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  '🔒 Secure payment · No recurring charges',
+                  widget.isPremium
+                      ? '🔒 Secure payment · Renews every 60 days'
+                      : '🔒 Secure payment · No recurring charges',
                   style: AppTextStyles.caption,
                 ),
               ),
@@ -342,8 +378,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
             context.read<PaymentProvider>().reset();
           },
           child: Text('Cancel & try again',
-              style: AppTextStyles.body
-                  .copyWith(color: AppColors.error)),
+              style:
+                  AppTextStyles.body.copyWith(color: AppColors.error)),
         ),
       ],
     );
@@ -353,8 +389,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return InputDecoration(
       hintText: hint,
       prefixIcon: Icon(icon, color: AppColors.textHint),
-      border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10)),
+      border:
+          OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       filled: true,
       fillColor: Colors.white,
       counterText: '',

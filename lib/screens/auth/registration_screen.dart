@@ -1,13 +1,5 @@
 // lib/screens/auth/registration_screen.dart
-// Farmer registration screen for AgricAssist ZW.
-// Features:
-//   - Full name, phone, email (optional), password fields
-//   - Province dropdown → District search with auto-suggest
-//   - Auto-detects agro-ecological region from district
-//   - Unknown district handling with submission flow
-//   - Language selection
-//   - Input validation
-//   - Connects to AuthProvider
+// Developed by Sir Enocks — Cor Technologies
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -17,7 +9,6 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/region_badge.dart';
 import '../../widgets/primary_button.dart';
-import '../dashboard/dashboard_screen.dart';
 import '../farm_profile/farm_profile_setup_screen.dart';
 
 class RegistrationScreen extends StatefulWidget {
@@ -31,27 +22,40 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _pageController = PageController();
 
-  // Page 1 controllers
-  final _nameController    = TextEditingController();
-  final _phoneController   = TextEditingController();
-  final _emailController   = TextEditingController();
+  // Page 1
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  // Page 2 controllers
+  // Page 2
   final _districtController = TextEditingController();
+
+  // Page 3 — Security question
+  String? _selectedSecurityQuestion;
+  final _securityAnswerController = TextEditingController();
+  bool _obscureAnswer = true;
+
+  static const List<String> _securityQuestions = [
+    "What is your mother's maiden name?",
+    "What was the name of your first school?",
+    "What is the name of the town where you were born?",
+    "What was the name of your childhood pet?",
+    "What is your oldest sibling's middle name?",
+    "What street did you grow up on?",
+    "What was your childhood nickname?",
+  ];
 
   // State
   int _currentPage = 0;
   bool _obscurePassword = true;
-  bool _obscureConfirm  = true;
+  bool _obscureConfirm = true;
   String? _selectedProvince;
   String? _selectedDistrict;
   String? _detectedRegion;
   String _selectedLanguage = 'en';
   bool _isUnknownDistrict = false;
-
-  // Filtered districts for search
   List<String> _filteredDistricts = [];
   bool _showDistrictDropdown = false;
 
@@ -63,14 +67,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _districtController.dispose();
+    _securityAnswerController.dispose();
     _pageController.dispose();
     super.dispose();
   }
 
   // ---------------------------------------------------------------------------
-  // DISTRICT SEARCH LOGIC
+  // DISTRICT SEARCH
   // ---------------------------------------------------------------------------
-
   void _onDistrictChanged(String value) {
     if (value.length < 2) {
       setState(() {
@@ -82,26 +86,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       });
       return;
     }
-
-    // Filter districts from selected province (or all if no province)
-    List<String> pool;
-    if (_selectedProvince != null) {
-      pool = ZimbabweDistricts.provinceDistricts[_selectedProvince!] ?? [];
-    } else {
-      pool = ZimbabweDistricts.allOfficialDistricts;
-    }
-
+    List<String> pool = _selectedProvince != null
+        ? ZimbabweDistricts.provinceDistricts[_selectedProvince!] ?? []
+        : ZimbabweDistricts.allOfficialDistricts;
     final query = value.toLowerCase();
-    final filtered = pool
-        .where((d) => d.toLowerCase().contains(query))
-        .toList();
-
+    final filtered =
+        pool.where((d) => d.toLowerCase().contains(query)).toList();
     setState(() {
       _filteredDistricts = filtered;
       _showDistrictDropdown = filtered.isNotEmpty;
     });
-
-    // Try exact match for region detection
     _detectRegion(value);
   }
 
@@ -125,14 +119,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // FORM NAVIGATION
+  // NAVIGATION
   // ---------------------------------------------------------------------------
-
   void _nextPage() {
-    if (_currentPage == 0) {
-      // Validate page 1 fields
-      if (!_validatePage1()) return;
-    }
+    if (_currentPage == 0 && !_validatePage1()) return;
+    if (_currentPage == 1 && !_validatePage2()) return;
     _pageController.nextPage(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
@@ -166,6 +157,18 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     return true;
   }
 
+  bool _validatePage2() {
+    if (_selectedProvince == null) {
+      _showError('Please select your province.');
+      return false;
+    }
+    if (_districtController.text.trim().isEmpty) {
+      _showError('Please enter your district.');
+      return false;
+    }
+    return true;
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -177,48 +180,51 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // SUBMIT REGISTRATION
+  // SUBMIT
   // ---------------------------------------------------------------------------
-
   Future<void> _submit() async {
-    if (_selectedProvince == null) {
-      _showError('Please select your province.');
+    if (_selectedSecurityQuestion == null) {
+      _showError('Please select a security question.');
       return;
     }
-    if (_districtController.text.trim().isEmpty) {
-      _showError('Please enter your district.');
+    if (_securityAnswerController.text.trim().length < 2) {
+      _showError('Please enter your security answer.');
       return;
     }
 
     if (_isUnknownDistrict) {
-      // Show dialog explaining what will happen
       final proceed = await _showUnknownDistrictDialog();
       if (!proceed) return;
     }
 
-    final authProvider = context.read<AuthProvider>();
-
-    final result = await authProvider.register(
-      fullName: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
-      password: _passwordController.text,
-      district: _selectedDistrict ?? _districtController.text.trim(),
-      province: _selectedProvince!,
-      email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
-      language: _selectedLanguage,
-    );
+    final result = await context.read<AuthProvider>().register(
+          fullName: _nameController.text.trim(),
+          phone: _phoneController.text.trim(),
+          password: _passwordController.text,
+          district:
+              _selectedDistrict ?? _districtController.text.trim(),
+          province: _selectedProvince!,
+          email: _emailController.text.trim().isEmpty
+              ? null
+              : _emailController.text.trim(),
+          language: _selectedLanguage,
+          securityQuestion: _selectedSecurityQuestion,
+          securityAnswer: _securityAnswerController.text.trim(),
+        );
 
     if (!mounted) return;
 
-   if (result.isSuccess) {
-  // Navigate to farm profile setup (NEW)
-  Navigator.of(context).pushReplacement(
-    MaterialPageRoute(builder: (_) => const FarmProfileSetupScreen()),
-  );
+    if (result.isSuccess) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+            builder: (_) => const FarmProfileSetupScreen()),
+      );
     } else if (result.isUnknownDistrict) {
-      _showError(result.errorMessage ?? 'Unknown district. Please try again.');
+      _showError(
+          result.errorMessage ?? 'Unknown district. Please try again.');
     } else {
-      _showError(result.errorMessage ?? 'Registration failed. Please try again.');
+      _showError(
+          result.errorMessage ?? 'Registration failed. Please try again.');
     }
   }
 
@@ -226,7 +232,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('District Not Recognized'),
         content: Text(
           '"${_districtController.text}" is not in our district list yet.\n\n'
@@ -252,7 +259,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   // ---------------------------------------------------------------------------
   // BUILD
   // ---------------------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -266,10 +272,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               child: PageView(
                 controller: _pageController,
                 physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (page) => setState(() => _currentPage = page),
+                onPageChanged: (page) =>
+                    setState(() => _currentPage = page),
                 children: [
                   _buildPage1PersonalDetails(),
                   _buildPage2LocationLanguage(),
+                  _buildPage3SecurityQuestion(),
                 ],
               ),
             ),
@@ -279,11 +287,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // HEADER
-  // ---------------------------------------------------------------------------
-
   Widget _buildHeader() {
+    final titles = [
+      'Create Account',
+      'Your Location',
+      'Account Security',
+    ];
+    final subtitles = [
+      'Step 1 of 3 — Personal details',
+      'Step 2 of 3 — Farm location',
+      'Step 3 of 3 — Password recovery',
+    ];
     return Container(
       color: AppColors.primary,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -298,17 +312,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _currentPage == 0 ? 'Create Account' : 'Your Location',
-                style: AppTextStyles.heading2.copyWith(color: Colors.white),
-              ),
+              Text(titles[_currentPage],
+                  style:
+                      AppTextStyles.heading2.copyWith(color: Colors.white)),
               const SizedBox(height: 2),
-              Text(
-                _currentPage == 0
-                    ? 'Step 1 of 2 — Personal details'
-                    : 'Step 2 of 2 — Farm location',
-                style: AppTextStyles.bodySmall.copyWith(color: Colors.white70),
-              ),
+              Text(subtitles[_currentPage],
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: Colors.white70)),
             ],
           ),
         ],
@@ -316,23 +326,19 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // PROGRESS INDICATOR
-  // ---------------------------------------------------------------------------
-
   Widget _buildProgressIndicator() {
     return LinearProgressIndicator(
-      value: (_currentPage + 1) / 2,
+      value: (_currentPage + 1) / 3,
       backgroundColor: AppColors.divider,
-      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
+      valueColor:
+          const AlwaysStoppedAnimation<Color>(AppColors.accent),
       minHeight: 4,
     );
   }
 
   // ---------------------------------------------------------------------------
-  // PAGE 1: PERSONAL DETAILS
+  // PAGE 1
   // ---------------------------------------------------------------------------
-
   Widget _buildPage1PersonalDetails() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -342,15 +348,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
-            Text('Tell us about yourself', style: AppTextStyles.heading3),
+            Text('Tell us about yourself',
+                style: AppTextStyles.heading3),
             const SizedBox(height: 4),
             Text(
               'Your information helps us personalize farming advice for you.',
               style: AppTextStyles.bodySmall,
             ),
             const SizedBox(height: 24),
-
-            // Full Name
             CustomTextField(
               controller: _nameController,
               label: 'Full Name',
@@ -360,8 +365,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               keyboardType: TextInputType.name,
             ),
             const SizedBox(height: 16),
-
-            // Phone Number
             CustomTextField(
               controller: _phoneController,
               label: 'Phone Number',
@@ -371,8 +374,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               helperText: 'EcoCash, OneMoney or any Zimbabwe number',
             ),
             const SizedBox(height: 16),
-
-            // Email (optional)
             CustomTextField(
               controller: _emailController,
               label: 'Email Address (optional)',
@@ -381,8 +382,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 16),
-
-            // Password
             CustomTextField(
               controller: _passwordController,
               label: 'Password',
@@ -391,16 +390,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               obscureText: _obscurePassword,
               suffixIcon: IconButton(
                 icon: Icon(
-                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  _obscurePassword
+                      ? Icons.visibility_off
+                      : Icons.visibility,
                   color: AppColors.textSecondary,
                 ),
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
+                onPressed: () => setState(
+                    () => _obscurePassword = !_obscurePassword),
               ),
             ),
             const SizedBox(height: 16),
-
-            // Confirm Password
             CustomTextField(
               controller: _confirmPasswordController,
               label: 'Confirm Password',
@@ -409,7 +408,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               obscureText: _obscureConfirm,
               suffixIcon: IconButton(
                 icon: Icon(
-                  _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                  _obscureConfirm
+                      ? Icons.visibility_off
+                      : Icons.visibility,
                   color: AppColors.textSecondary,
                 ),
                 onPressed: () =>
@@ -417,16 +418,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               ),
             ),
             const SizedBox(height: 32),
-
-            // Next button
             PrimaryButton(
               label: 'Next: Location Details',
               icon: Icons.arrow_forward,
               onPressed: _nextPage,
             ),
             const SizedBox(height: 16),
-
-            // Login link
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -451,9 +448,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // PAGE 2: LOCATION & LANGUAGE
+  // PAGE 2
   // ---------------------------------------------------------------------------
-
   Widget _buildPage2LocationLanguage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -468,39 +464,128 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             style: AppTextStyles.bodySmall,
           ),
           const SizedBox(height: 24),
-
-          // Province dropdown
           _buildProvinceDropdown(),
           const SizedBox(height: 16),
-
-          // District search with autocomplete
           _buildDistrictSearch(),
-          const SizedBox(height: 8),
-
-          // Region badge (auto-detected)
           if (_detectedRegion != null) ...[
             const SizedBox(height: 8),
             RegionBadge(region: _detectedRegion!),
-            const SizedBox(height: 8),
           ],
-
-          // Unknown district warning
           if (_isUnknownDistrict) ...[
             const SizedBox(height: 8),
             _buildUnknownDistrictWarning(),
           ],
-
           const SizedBox(height: 24),
-
-          // Language selection
           _buildLanguageSelector(),
           const SizedBox(height: 24),
-
-          // Trial info card
           _buildTrialInfoCard(),
           const SizedBox(height: 24),
+          PrimaryButton(
+            label: 'Next: Account Security',
+            icon: Icons.arrow_forward,
+            onPressed: _nextPage,
+          ),
+        ],
+      ),
+    );
+  }
 
-          // Register button
+  // ---------------------------------------------------------------------------
+  // PAGE 3 — SECURITY QUESTION
+  // ---------------------------------------------------------------------------
+  Widget _buildPage3SecurityQuestion() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          Text('Account Recovery', style: AppTextStyles.heading3),
+          const SizedBox(height: 4),
+          Text(
+            'If you forget your password, we will use your security question to verify your identity.',
+            style: AppTextStyles.bodySmall,
+          ),
+          const SizedBox(height: 24),
+
+          // Security question info box
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.info.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppColors.info.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.shield_outlined,
+                    color: AppColors.info, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Your answer is encrypted and stored securely. '
+                    'It cannot be read by anyone.',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.info),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Question dropdown
+          Text('Security Question', style: AppTextStyles.label),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _selectedSecurityQuestion,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.help_outline,
+                  color: AppColors.primary),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+            ),
+            hint: const Text('Choose a security question'),
+            isExpanded: true,
+            items: _securityQuestions
+                .map((q) => DropdownMenuItem(
+                      value: q,
+                      child: Text(q,
+                          style: AppTextStyles.bodySmall,
+                          overflow: TextOverflow.ellipsis),
+                    ))
+                .toList(),
+            onChanged: (value) =>
+                setState(() => _selectedSecurityQuestion = value),
+          ),
+          const SizedBox(height: 16),
+
+          // Answer field
+          CustomTextField(
+            controller: _securityAnswerController,
+            label: 'Your Answer',
+            hint: 'Enter your answer',
+            prefixIcon: Icons.lock_person_outlined,
+            obscureText: _obscureAnswer,
+            helperText: 'Answer is not case-sensitive',
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureAnswer
+                    ? Icons.visibility_off
+                    : Icons.visibility,
+                color: AppColors.textSecondary,
+              ),
+              onPressed: () =>
+                  setState(() => _obscureAnswer = !_obscureAnswer),
+            ),
+          ),
+          const SizedBox(height: 32),
+
           Consumer<AuthProvider>(
             builder: (context, auth, _) => PrimaryButton(
               label: 'Create My Account',
@@ -509,33 +594,36 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               onPressed: _submit,
             ),
           ),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
   // ---------------------------------------------------------------------------
-  // PROVINCE DROPDOWN
+  // SHARED WIDGETS
   // ---------------------------------------------------------------------------
-
   Widget _buildProvinceDropdown() {
-    final provinces = ZimbabweDistricts.provinceDistricts.keys.toList()..sort();
+    final provinces =
+        ZimbabweDistricts.provinceDistricts.keys.toList()..sort();
     return DropdownButtonFormField<String>(
       value: _selectedProvince,
       decoration: InputDecoration(
         labelText: 'Province',
-        prefixIcon: const Icon(Icons.map_outlined, color: AppColors.primary),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        prefixIcon:
+            const Icon(Icons.map_outlined, color: AppColors.primary),
+        border:
+            OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: true,
         fillColor: Colors.white,
       ),
       hint: const Text('Select your province'),
-      items: provinces.map((province) {
-        return DropdownMenuItem(
-          value: province,
-          child: Text(province),
-        );
-      }).toList(),
+      items: provinces
+          .map((province) => DropdownMenuItem(
+                value: province,
+                child: Text(province),
+              ))
+          .toList(),
       onChanged: (value) {
         setState(() {
           _selectedProvince = value;
@@ -548,10 +636,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       },
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // DISTRICT SEARCH
-  // ---------------------------------------------------------------------------
 
   Widget _buildDistrictSearch() {
     return Column(
@@ -571,10 +655,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               borderRadius: BorderRadius.circular(12),
               boxShadow: const [
                 BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 8,
-                  offset: Offset(0, 4),
-                ),
+                    color: Colors.black12,
+                    blurRadius: 8,
+                    offset: Offset(0, 4)),
               ],
             ),
             child: Column(
@@ -593,10 +676,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // UNKNOWN DISTRICT WARNING
-  // ---------------------------------------------------------------------------
-
   Widget _buildUnknownDistrictWarning() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -607,7 +686,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: AppColors.warning, size: 20),
+          const Icon(Icons.info_outline,
+              color: AppColors.warning, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -621,10 +701,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // LANGUAGE SELECTOR
-  // ---------------------------------------------------------------------------
-
   Widget _buildLanguageSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -636,30 +712,35 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             final isSelected = _selectedLanguage == lang['code'];
             return Expanded(
               child: GestureDetector(
-                onTap: () => setState(() => _selectedLanguage = lang['code']!),
+                onTap: () =>
+                    setState(() => _selectedLanguage = lang['code']!),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primary : Colors.white,
+                    color: isSelected
+                        ? AppColors.primary
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSelected ? AppColors.primary : AppColors.divider,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.divider,
                       width: isSelected ? 2 : 1,
                     ),
                   ),
                   child: Column(
                     children: [
-                      Text(
-                        _languageFlag(lang['code']!),
-                        style: const TextStyle(fontSize: 20),
-                      ),
+                      Text(_languageFlag(lang['code']!),
+                          style: const TextStyle(fontSize: 20)),
                       const SizedBox(height: 4),
                       Text(
                         lang['name']!.split(' ').first,
                         style: AppTextStyles.label.copyWith(
-                          color: isSelected ? Colors.white : AppColors.textPrimary,
+                          color: isSelected
+                              ? Colors.white
+                              : AppColors.textPrimary,
                           fontWeight: FontWeight.w600,
                         ),
                         textAlign: TextAlign.center,
@@ -677,16 +758,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   String _languageFlag(String code) {
     switch (code) {
-      case 'en':  return '🇬🇧';
-      case 'sn':  return '🇿🇼';
-      case 'nd':  return '🇿🇼';
-      default:    return '🌐';
+      case 'en':
+        return '🇬🇧';
+      case 'sn':
+        return '🇿🇼';
+      case 'nd':
+        return '🇿🇼';
+      default:
+        return '🌐';
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // TRIAL INFO CARD
-  // ---------------------------------------------------------------------------
 
   Widget _buildTrialInfoCard() {
     return Container(
@@ -701,7 +782,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.star_outline, color: AppColors.accent, size: 36),
+          const Icon(Icons.star_outline,
+              color: AppColors.accent, size: 36),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -714,7 +796,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Full access to all features. Then just £${AppConstants.subscriptionGBP.toStringAsFixed(2)} for lifetime access.',
+                  'Full access to all features. Then \$2.99 for 15 core modules (lifetime) or \$1.99/2 months for premium.',
                   style: AppTextStyles.bodySmall
                       .copyWith(color: Colors.white70),
                 ),

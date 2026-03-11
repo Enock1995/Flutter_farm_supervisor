@@ -1,8 +1,17 @@
 // lib/services/database_service.dart
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:path/path.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'db_init_stub.dart'
+    if (dart.library.ffi) 'db_init_desktop.dart';
+
 import '../constants/app_theme.dart';
 import '../models/user_model.dart';
+import 'farm_management_database_service.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -10,6 +19,7 @@ class DatabaseService {
   DatabaseService._internal();
 
   Database? _database;
+  static bool _factoryInitialised = false;
 
   Future<Database> get database async {
     _database ??= await _initDatabase();
@@ -17,16 +27,57 @@ class DatabaseService {
   }
 
   Future<Database> _initDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, AppConstants.dbName);
+    if (!_factoryInitialised) {
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+        await initDatabaseFactory();
+      }
+      _factoryInitialised = true;
+    }
+
+    final String dbPath = await _resolveDbPath();
 
     return await openDatabase(
-      path,
-      version: AppConstants.dbVersion,
+      dbPath,
+      version: 4,
       onCreate: _createTables,
+      onUpgrade: _onUpgrade,
     );
   }
 
+  /// Stable persistent path across reinstalls.
+  ///
+  /// Android problem: getDatabasesPath() lives in app-internal storage
+  /// which is WIPED on uninstall. To survive reinstalls we store the DB
+  /// in getApplicationDocumentsDirectory() (external app storage, NOT
+  /// wiped on uninstall) and save the path in SharedPreferences as a seed
+  /// so we can find it again after reinstall.
+  ///
+  /// Windows: uses getApplicationSupportDirectory() (AppData\Roaming).
+  Future<String> _resolveDbPath() async {
+    // ── Windows / Linux ───────────────────────────────
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+      final Directory appDir = await getApplicationSupportDirectory();
+      await appDir.create(recursive: true);
+      return p.join(appDir.path, AppConstants.dbName);
+    }
+
+    // ── Android / iOS ─────────────────────────────────
+    // Use Documents directory — survives uninstall on Android
+    final Directory docsDir = await getApplicationDocumentsDirectory();
+    final String dbDir = p.join(docsDir.path, 'agricassist');
+    await Directory(dbDir).create(recursive: true);
+    final String fullPath = p.join(dbDir, AppConstants.dbName);
+
+    // Persist path so we can verify it on future launches
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('db_path', fullPath);
+
+    return fullPath;
+  }
+
+  // ===========================================================================
+  // CREATE ALL TABLES (fresh install — v4)
+  // ===========================================================================
   Future<void> _createTables(Database db, int version) async {
     await db.execute('''
       CREATE TABLE users (
@@ -43,6 +94,10 @@ class DatabaseService {
         trial_ends_at TEXT NOT NULL,
         is_subscribed INTEGER NOT NULL DEFAULT 0,
         subscribed_at TEXT,
+        is_premium_subscribed INTEGER NOT NULL DEFAULT 0,
+        premium_expires_at TEXT,
+        security_question TEXT,
+        security_answer_hash TEXT,
         password_hash TEXT
       )
     ''');
@@ -149,6 +204,80 @@ class DatabaseService {
         notes TEXT
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ai_diagnosis_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        subject_type TEXT NOT NULL,
+        crop_or_animal TEXT NOT NULL DEFAULT '',
+        symptoms TEXT NOT NULL,
+        diagnosis TEXT NOT NULL,
+        confidence TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        description TEXT NOT NULL,
+        treatment TEXT NOT NULL DEFAULT '[]',
+        prevention TEXT NOT NULL DEFAULT '[]',
+        local_products TEXT NOT NULL DEFAULT '',
+        see_expert INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (user_id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ai_yield_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        crop_type TEXT NOT NULL,
+        field_size_ha REAL NOT NULL,
+        predicted_yield_per_ha REAL NOT NULL,
+        total_predicted_tonnes REAL NOT NULL,
+        confidence TEXT NOT NULL,
+        zim_average_per_ha REAL NOT NULL,
+        comparison TEXT NOT NULL,
+        comparison_percent INTEGER NOT NULL DEFAULT 0,
+        limiting_factors TEXT NOT NULL DEFAULT '[]',
+        recommendations TEXT NOT NULL DEFAULT '[]',
+        harvest_window TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (user_id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ai_chat_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (user_id)
+      )
+    ''');
+
+    await FarmManagementDatabaseService.createTables(db);
+  }
+
+  // ===========================================================================
+  // UPGRADE EXISTING INSTALLS
+  // ===========================================================================
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('CREATE TABLE IF NOT EXISTS ai_diagnosis_history (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject_type TEXT NOT NULL, crop_or_animal TEXT NOT NULL DEFAULT \'\', symptoms TEXT NOT NULL, diagnosis TEXT NOT NULL, confidence TEXT NOT NULL, severity TEXT NOT NULL, description TEXT NOT NULL, treatment TEXT NOT NULL DEFAULT \'[]\', prevention TEXT NOT NULL DEFAULT \'[]\', local_products TEXT NOT NULL DEFAULT \'\', see_expert INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)');
+      await db.execute('CREATE TABLE IF NOT EXISTS ai_yield_history (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, crop_type TEXT NOT NULL, field_size_ha REAL NOT NULL, predicted_yield_per_ha REAL NOT NULL, total_predicted_tonnes REAL NOT NULL, confidence TEXT NOT NULL, zim_average_per_ha REAL NOT NULL, comparison TEXT NOT NULL, comparison_percent INTEGER NOT NULL DEFAULT 0, limiting_factors TEXT NOT NULL DEFAULT \'[]\', recommendations TEXT NOT NULL DEFAULT \'[]\', harvest_window TEXT NOT NULL DEFAULT \'\', created_at TEXT NOT NULL)');
+      await db.execute('CREATE TABLE IF NOT EXISTS ai_chat_history (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)');
+    }
+    if (oldVersion < 3) {
+      await FarmManagementDatabaseService.createTables(db);
+    }
+    if (oldVersion < 4) {
+      // Add new premium + security question columns to existing users table
+      try { await db.execute('ALTER TABLE users ADD COLUMN is_premium_subscribed INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE users ADD COLUMN premium_expires_at TEXT'); } catch (_) {}
+      try { await db.execute('ALTER TABLE users ADD COLUMN security_question TEXT'); } catch (_) {}
+      try { await db.execute('ALTER TABLE users ADD COLUMN security_answer_hash TEXT'); } catch (_) {}
+    }
   }
 
   // ===========================================================================
@@ -200,6 +329,34 @@ class DatabaseService {
     );
   }
 
+  /// Activate premium for 60 days from now
+  Future<void> activatePremium(String userId) async {
+    final db = await database;
+    final expiresAt = DateTime.now()
+        .add(const Duration(days: 60))
+        .toIso8601String();
+    await db.update(
+      'users',
+      {
+        'is_premium_subscribed': 1,
+        'premium_expires_at': expiresAt,
+      },
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  /// Reset password after security question verified
+  Future<void> updatePassword(String phone, String newPasswordHash) async {
+    final db = await database;
+    await db.update(
+      'users',
+      {'password_hash': newPasswordHash},
+      where: 'phone = ?',
+      whereArgs: [phone],
+    );
+  }
+
   // ===========================================================================
   // USER_ID COUNTER
   // ===========================================================================
@@ -207,25 +364,16 @@ class DatabaseService {
   Future<int> getNextUserNumber(String districtCode) async {
     final db = await database;
     final code = districtCode.toUpperCase();
-
     final existing = await db.query('user_id_counter',
         where: 'district_code = ?', whereArgs: [code], limit: 1);
-
     if (existing.isEmpty) {
-      await db.insert('user_id_counter', {
-        'district_code': code,
-        'next_number': 2,
-      });
+      await db.insert('user_id_counter',
+          {'district_code': code, 'next_number': 2});
       return 1;
     }
-
     final current = existing.first['next_number'] as int;
-    await db.update(
-      'user_id_counter',
-      {'next_number': current + 1},
-      where: 'district_code = ?',
-      whereArgs: [code],
-    );
+    await db.update('user_id_counter', {'next_number': current + 1},
+        where: 'district_code = ?', whereArgs: [code]);
     return current;
   }
 
@@ -239,8 +387,7 @@ class DatabaseService {
         conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  Future<Map<String, dynamic>?> getLearnedDistrict(
-      String districtName) async {
+  Future<Map<String, dynamic>?> getLearnedDistrict(String districtName) async {
     final db = await database;
     final key = districtName.trim().toLowerCase();
     final result = await db.query('learned_districts',
@@ -276,9 +423,7 @@ class DatabaseService {
     final db = await database;
     final existing = await db.query('farm_profiles',
         where: 'user_id = ?', whereArgs: [profile.userId], limit: 1);
-
     final map = profile.toMap()..['id'] = profile.userId;
-
     if (existing.isEmpty) {
       await db.insert('farm_profiles', map);
     } else {
@@ -294,6 +439,10 @@ class DatabaseService {
     if (maps.isEmpty) return null;
     return FarmProfile.fromMap(maps.first);
   }
+
+  // ===========================================================================
+  // UTILITIES
+  // ===========================================================================
 
   Future<void> close() async {
     final db = _database;
