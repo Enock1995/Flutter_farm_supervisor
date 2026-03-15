@@ -51,18 +51,31 @@ import 'screens/ai/ai_diagnosis_screen.dart';
 import 'screens/ai/ai_yield_screen.dart';
 import 'screens/ai/ai_chat_screen.dart';
 import 'providers/farm_management_provider.dart';
+import 'providers/payroll_fieldreport_provider.dart';
 import 'screens/farm_management/farm_registration_screen.dart';
 import 'screens/farm_management/worker_onboarding_screen.dart';
 import 'screens/farm_management/gps_clockin_screen.dart';
+import 'screens/farm_management/task_assignment_screen.dart';
+import 'screens/farm_management/activity_feed_screen.dart';
+import 'screens/farm_management/payroll_screen.dart';
+import 'screens/farm_management/field_reports_screen.dart';
+import 'screens/farm_management/photo_diary_screen.dart';
+import 'providers/sos_provider.dart';
+import 'screens/farm_management/sos_alert_screen.dart';
+import 'screens/farm_management/worker_performance_screen.dart';
+import 'screens/analytics/advanced_analytics_screen.dart';
+import 'screens/analytics/auto_reports_screen.dart';
+import 'screens/farm_management/multi_farm_screen.dart';
+// ── Mudhumeni imports ────────────────────────────────────
+import 'screens/mudhumeni/mudhumeni_registration_screen.dart';
+import 'screens/mudhumeni/knowledge_posts_screen.dart';
+import 'screens/mudhumeni/qa_screens.dart';
+import 'screens/mudhumeni/community_fieldvisits_screens.dart';
+// ── Problem Heatmap import ───────────────────────────────
+import 'screens/mudhumeni/problem_heatmap_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // ── DO NOT init sqflite FFI here ──────────────────────
-  // DatabaseService handles platform-aware FFI init internally
-  // using path_provider for a stable persistent path.
-  // Initialising it here causes a second conflicting databaseFactory
-  // assignment that points to the wrong .dart_tool path.
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -106,6 +119,8 @@ class AgricAssistApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ReportsProvider()),
         ChangeNotifierProvider(create: (_) => AiProvider()),
         ChangeNotifierProvider(create: (_) => FarmManagementProvider()),
+        ChangeNotifierProvider(create: (_) => PayrollFieldReportProvider()),
+        ChangeNotifierProvider(create: (_) => SosProvider()),
       ],
       child: MaterialApp(
         title: AppConstants.appName,
@@ -113,64 +128,64 @@ class AgricAssistApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         initialRoute: '/',
         routes: {
-          // ── Public routes (no gate) ──────────────────
-          '/':                  (context) => const SplashScreen(),
-          '/login':             (context) => const LoginScreen(),
-          '/register':          (context) => const RegistrationScreen(),
-          '/forgot-password':   (context) => const ForgotPasswordScreen(),
-          '/farm-profile':      (context) => const FarmProfileSetupScreen(),
-          '/paywall':           (context) => const PaywallScreen(),
-          '/payment-success':   (context) => const PaymentSuccessScreen(),
+          // ── Public ───────────────────────────────────
+          '/':                 (context) => const SplashScreen(),
+          '/login':            (context) => const LoginScreen(),
+          '/register':         (context) => const RegistrationScreen(),
+          '/forgot-password':  (context) => const ForgotPasswordScreen(),
+          '/farm-profile':     (context) => const FarmProfileSetupScreen(),
+          '/paywall':          (context) => const PaywallScreen(),
+          '/payment-success':  (context) => const PaymentSuccessScreen(),
 
-          // ── Core routes — base subscription gate ─────
-          '/dashboard':         (context) => const _SubscriptionGate(
-                                    child: DashboardScreen()),
-          '/crops':             (context) => const _SubscriptionGate(
-                                    child: CropManagementScreen()),
-          '/livestock':         (context) => const _SubscriptionGate(
-                                    child: LivestockScreen()),
-          '/weather':           (context) => const _SubscriptionGate(
-                                    child: WeatherScreen()),
-          '/finances':          (context) => const _SubscriptionGate(
-                                    child: FinanceScreen()),
-          '/horticulture':      (context) => const _SubscriptionGate(
-                                    child: HorticultureScreen()),
-          '/knowledge-base':    (context) => const _SubscriptionGate(
-                                    child: KnowledgeBaseScreen()),
-          '/market':            (context) => const _SubscriptionGate(
-                                    child: MarketPricesScreen()),
-          '/news':              (context) => const _SubscriptionGate(
-                                    child: AgriNewsScreen()),
-          '/labour':            (context) => const _SubscriptionGate(
-                                    child: LabourTrackerScreen()),
-          '/calendar':          (context) => const _SubscriptionGate(
-                                    child: FarmCalendarScreen()),
-          '/pest-disease':      (context) => const _SubscriptionGate(
-                                    child: PestDiseaseScreen()),
-          '/soil':              (context) => const _SubscriptionGate(
-                                    child: SoilManagementScreen()),
-          '/irrigation':        (context) => const _SubscriptionGate(
-                                    child: IrrigationScreen()),
-          '/input-calculator':  (context) => const _SubscriptionGate(
-                                    child: InputCalculatorScreen()),
-          '/reports':           (context) => const _SubscriptionGate(
-                                    child: ReportsScreen()),
-          '/profile':           (context) => const _SubscriptionGate(
-                                    child: ProfileScreen()),
+          // ── Core (base subscription gate) ────────────
+          '/dashboard':        (context) => const _SubscriptionGate(child: DashboardScreen()),
+          '/crops':            (context) => const _SubscriptionGate(child: CropManagementScreen()),
+          '/livestock':        (context) => const _SubscriptionGate(child: LivestockScreen()),
+          '/weather':          (context) => const _SubscriptionGate(child: WeatherScreen()),
+          '/finances':         (context) => const _SubscriptionGate(child: FinanceScreen()),
+          '/horticulture':     (context) => const _SubscriptionGate(child: HorticultureScreen()),
+          '/knowledge-base':   (context) => const _SubscriptionGate(child: KnowledgeBaseScreen()),
+          '/market':           (context) => const _SubscriptionGate(child: MarketPricesScreen()),
+          '/news':             (context) => const _SubscriptionGate(child: AgriNewsScreen()),
+          '/labour':           (context) => const _SubscriptionGate(child: LabourTrackerScreen()),
+          '/calendar':         (context) => const _SubscriptionGate(child: FarmCalendarScreen()),
+          '/pest-disease':     (context) => const _SubscriptionGate(child: PestDiseaseScreen()),
+          '/soil':             (context) => const _SubscriptionGate(child: SoilManagementScreen()),
+          '/irrigation':       (context) => const _SubscriptionGate(child: IrrigationScreen()),
+          '/input-calculator': (context) => const _SubscriptionGate(child: InputCalculatorScreen()),
+          '/reports':          (context) => const _SubscriptionGate(child: ReportsScreen()),
+          '/profile':          (context) => const _SubscriptionGate(child: ProfileScreen()),
 
-          // ── Premium routes — premium gate ────────────
-          '/ai-diagnosis':      (context) => const _PremiumGate(
-                                    child: AiDiagnosisScreen()),
-          '/ai-yield':          (context) => const _PremiumGate(
-                                    child: AiYieldScreen()),
-          '/ai-chat':           (context) => const _PremiumGate(
-                                    child: AiChatScreen()),
-          '/farm-registration': (context) => const _PremiumGate(
-                                    child: FarmRegistrationScreen()),
-          '/worker-onboarding': (context) => const _PremiumGate(
-                                    child: WorkerOnboardingScreen()),
-          '/gps-clockin':       (context) => const _PremiumGate(
-                                    child: GpsClockInScreen()),
+          // ── Premium (AI + advanced) ───────────────────
+          '/ai-diagnosis':     (context) => const _PremiumGate(child: AiDiagnosisScreen()),
+          '/ai-yield':         (context) => const _PremiumGate(child: AiYieldScreen()),
+          '/ai-chat':          (context) => const _PremiumGate(child: AiChatScreen()),
+
+          // Remote Farm Management
+          '/farm-registration':  (context) => const _PremiumGate(child: FarmRegistrationScreen()),
+          '/worker-onboarding':  (context) => const _PremiumGate(child: WorkerOnboardingScreen()),
+          '/gps-clockin':        (context) => const _PremiumGate(child: GpsClockInScreen()),
+          '/task-assignment':    (context) => const _PremiumGate(child: TaskAssignmentScreen()),
+          '/activity-feed':      (context) => const _PremiumGate(child: ActivityFeedScreen()),
+          '/payroll':            (context) => const _PremiumGate(child: PayrollScreen()),
+          '/field-reports':      (context) => const _PremiumGate(child: FieldReportsScreen()),
+          '/photo-diary':        (context) => const _PremiumGate(child: PhotoDiaryScreen()),
+          '/sos-alert':          (context) => _PremiumGate(child: SosAlertScreen()),
+          '/worker-performance': (context) => _PremiumGate(child: WorkerPerformanceScreen()),
+          '/analytics':          (context) => _PremiumGate(child: AdvancedAnalyticsScreen()),
+          '/auto-reports':       (context) => _PremiumGate(child: AutoReportsScreen()),
+          '/multi-farm':         (context) => _PremiumGate(child: MultiFarmScreen()),
+
+          // ── AGRITEX Mudhumeni Network ─────────────────
+          '/mudhumeni-registration': (context) => const _PremiumGate(child: MudhumeniRegistrationScreen()),
+          '/area-management':        (context) => const _PremiumGate(child: AreaManagementScreen()),
+          '/knowledge-posts':        (context) => const _PremiumGate(child: KnowledgePostsScreen()),
+          '/public-qa':              (context) => const _PremiumGate(child: PublicQaScreen()),
+          '/private-qa':             (context) => const _PremiumGate(child: PrivateQaScreen()),
+          '/community':              (context) => const _PremiumGate(child: CommunityScreen()),
+          '/field-visits':           (context) => const _PremiumGate(child: FieldVisitsScreen()),
+          '/seasonal-calendar':      (context) => const _PremiumGate(child: SeasonalCalendarScreen()),
+          '/problem-heatmap':        (context) => const _PremiumGate(child: ProblemHeatmapScreen()),
         },
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const LoginScreen(),
@@ -180,8 +195,6 @@ class AgricAssistApp extends StatelessWidget {
   }
 }
 
-// ── Base subscription gate (core 15 modules) ─────────────
-// Blocks access if trial expired AND not base-subscribed.
 class _SubscriptionGate extends StatelessWidget {
   final Widget child;
   const _SubscriptionGate({required this.child});
@@ -190,17 +203,11 @@ class _SubscriptionGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
     if (user == null) return const LoginScreen();
-    if (SubscriptionService.isSoftLocked(user)) {
-      return const PaywallScreen();
-    }
+    if (SubscriptionService.isSoftLocked(user)) return const PaywallScreen();
     return child;
   }
 }
 
-// ── Premium gate (AI + advanced modules) ─────────────────
-// Blocks access if:
-//   - trial expired AND not base-subscribed (show paywall base tab), OR
-//   - base-subscribed but premium expired/never subscribed (show paywall premium tab)
 class _PremiumGate extends StatelessWidget {
   final Widget child;
   const _PremiumGate({required this.child});
@@ -209,14 +216,8 @@ class _PremiumGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
     if (user == null) return const LoginScreen();
-    // Check base access first
-    if (SubscriptionService.isSoftLocked(user)) {
-      return const PaywallScreen();
-    }
-    // Then check premium access
-    if (SubscriptionService.isPremiumLocked(user)) {
-      return const PaywallScreen();
-    }
+    if (SubscriptionService.isSoftLocked(user)) return const PaywallScreen();
+    if (SubscriptionService.isPremiumLocked(user)) return const PaywallScreen();
     return child;
   }
 }

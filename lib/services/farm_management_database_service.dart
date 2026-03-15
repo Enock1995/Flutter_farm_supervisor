@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'database_service.dart';
+import 'task_activity_database_service.dart';
 import '../models/farm_management_model.dart';
 
 class FarmManagementDatabaseService {
@@ -71,6 +72,9 @@ class FarmManagementDatabaseService {
         FOREIGN KEY (farm_id) REFERENCES farms (id)
       )
     ''');
+
+    // Tasks + Activity Feed tables
+    await TaskActivityDatabaseService.createTables(db);
   }
 
   // =========================================================

@@ -12,6 +12,10 @@ import 'db_init_stub.dart'
 import '../constants/app_theme.dart';
 import '../models/user_model.dart';
 import 'farm_management_database_service.dart';
+import 'task_activity_database_service.dart';
+import 'payroll_fieldreport_database_service.dart';
+import 'sos_database_service.dart';
+import 'mudhumeni_database_service.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -33,51 +37,30 @@ class DatabaseService {
       }
       _factoryInitialised = true;
     }
-
     final String dbPath = await _resolveDbPath();
-
     return await openDatabase(
       dbPath,
-      version: 4,
+      version: 8,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
   }
 
-  /// Stable persistent path across reinstalls.
-  ///
-  /// Android problem: getDatabasesPath() lives in app-internal storage
-  /// which is WIPED on uninstall. To survive reinstalls we store the DB
-  /// in getApplicationDocumentsDirectory() (external app storage, NOT
-  /// wiped on uninstall) and save the path in SharedPreferences as a seed
-  /// so we can find it again after reinstall.
-  ///
-  /// Windows: uses getApplicationSupportDirectory() (AppData\Roaming).
   Future<String> _resolveDbPath() async {
-    // ── Windows / Linux ───────────────────────────────
     if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
       final Directory appDir = await getApplicationSupportDirectory();
       await appDir.create(recursive: true);
       return p.join(appDir.path, AppConstants.dbName);
     }
-
-    // ── Android / iOS ─────────────────────────────────
-    // Use Documents directory — survives uninstall on Android
     final Directory docsDir = await getApplicationDocumentsDirectory();
     final String dbDir = p.join(docsDir.path, 'agricassist');
     await Directory(dbDir).create(recursive: true);
     final String fullPath = p.join(dbDir, AppConstants.dbName);
-
-    // Persist path so we can verify it on future launches
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('db_path', fullPath);
-
     return fullPath;
   }
 
-  // ===========================================================================
-  // CREATE ALL TABLES (fresh install — v4)
-  // ===========================================================================
   Future<void> _createTables(Database db, int version) async {
     await db.execute('''
       CREATE TABLE users (
@@ -257,11 +240,11 @@ class DatabaseService {
     ''');
 
     await FarmManagementDatabaseService.createTables(db);
+    await PayrollFieldReportDatabaseService.createTables(db);
+    await SosDatabaseService.createTables(db);
+    await MudhumeniDatabaseService.createTables(db);
   }
 
-  // ===========================================================================
-  // UPGRADE EXISTING INSTALLS
-  // ===========================================================================
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('CREATE TABLE IF NOT EXISTS ai_diagnosis_history (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject_type TEXT NOT NULL, crop_or_animal TEXT NOT NULL DEFAULT \'\', symptoms TEXT NOT NULL, diagnosis TEXT NOT NULL, confidence TEXT NOT NULL, severity TEXT NOT NULL, description TEXT NOT NULL, treatment TEXT NOT NULL DEFAULT \'[]\', prevention TEXT NOT NULL DEFAULT \'[]\', local_products TEXT NOT NULL DEFAULT \'\', see_expert INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)');
@@ -272,18 +255,26 @@ class DatabaseService {
       await FarmManagementDatabaseService.createTables(db);
     }
     if (oldVersion < 4) {
-      // Add new premium + security question columns to existing users table
       try { await db.execute('ALTER TABLE users ADD COLUMN is_premium_subscribed INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
       try { await db.execute('ALTER TABLE users ADD COLUMN premium_expires_at TEXT'); } catch (_) {}
       try { await db.execute('ALTER TABLE users ADD COLUMN security_question TEXT'); } catch (_) {}
       try { await db.execute('ALTER TABLE users ADD COLUMN security_answer_hash TEXT'); } catch (_) {}
     }
+    if (oldVersion < 5) {
+      await TaskActivityDatabaseService.createTables(db);
+    }
+    if (oldVersion < 6) {
+      await PayrollFieldReportDatabaseService.createTables(db);
+    }
+    if (oldVersion < 7) {
+      await SosDatabaseService.createTables(db);
+    }
+    if (oldVersion < 8) {
+      await MudhumeniDatabaseService.createTables(db);
+    }
   }
 
-  // ===========================================================================
-  // USER OPERATIONS
-  // ===========================================================================
-
+  // USER OPERATIONS — unchanged
   Future<void> insertUser(UserModel user) async {
     final db = await database;
     await db.insert('users', user.toMap(),
@@ -329,7 +320,6 @@ class DatabaseService {
     );
   }
 
-  /// Activate premium for 60 days from now
   Future<void> activatePremium(String userId) async {
     final db = await database;
     final expiresAt = DateTime.now()
@@ -346,7 +336,6 @@ class DatabaseService {
     );
   }
 
-  /// Reset password after security question verified
   Future<void> updatePassword(String phone, String newPasswordHash) async {
     final db = await database;
     await db.update(
@@ -356,10 +345,6 @@ class DatabaseService {
       whereArgs: [phone],
     );
   }
-
-  // ===========================================================================
-  // USER_ID COUNTER
-  // ===========================================================================
 
   Future<int> getNextUserNumber(String districtCode) async {
     final db = await database;
@@ -376,10 +361,6 @@ class DatabaseService {
         where: 'district_code = ?', whereArgs: [code]);
     return current;
   }
-
-  // ===========================================================================
-  // DISTRICT LEARNING
-  // ===========================================================================
 
   Future<void> submitUnknownDistrict(UnknownDistrict district) async {
     final db = await database;
@@ -415,10 +396,6 @@ class DatabaseService {
     );
   }
 
-  // ===========================================================================
-  // FARM PROFILE
-  // ===========================================================================
-
   Future<void> saveFarmProfile(FarmProfile profile) async {
     final db = await database;
     final existing = await db.query('farm_profiles',
@@ -439,10 +416,6 @@ class DatabaseService {
     if (maps.isEmpty) return null;
     return FarmProfile.fromMap(maps.first);
   }
-
-  // ===========================================================================
-  // UTILITIES
-  // ===========================================================================
 
   Future<void> close() async {
     final db = _database;
