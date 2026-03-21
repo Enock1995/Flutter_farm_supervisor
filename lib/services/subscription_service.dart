@@ -47,22 +47,21 @@ class SubscriptionService {
 
   // ── PREMIUM ACCESS (AI + advanced modules) ───────────
 
-  // Has premium access = premium subscribed AND not expired
-  // During trial, premium is also accessible for free
+  // Has premium access = premium subscribed AND not expired.
+  // Trial does NOT unlock premium — users must subscribe to access
+  // premium features from day 1, just like the locked tabs in
+  // Weather and Irrigation screens.
   static bool hasPremiumAccess(UserModel user) {
-    if (isTrialActive(user)) return true; // free during trial
     return user.hasPremiumAccess;
   }
 
-  // Is premium locked = base subscribed but premium expired/never subscribed
+  // Is premium locked = does not have an active premium subscription
   static bool isPremiumLocked(UserModel user) {
-    if (isTrialActive(user)) return false;
     return !user.hasPremiumAccess;
   }
 
   // Days until premium expires
   static int premiumDaysRemaining(UserModel user) {
-    if (isTrialActive(user)) return trialDaysRemaining(user);
     return user.premiumDaysRemaining;
   }
 }

@@ -37,6 +37,7 @@ class _DashboardScreenState
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
+    final auth = context.watch<AuthProvider>();
     final isOnline =
         context.watch<ConnectivityProvider>().isOnline;
 
@@ -44,6 +45,12 @@ class _DashboardScreenState
       appBar: AppBar(
         title: const Text(AppConstants.appName),
         actions: [
+          // ── TEMP DEBUG BUTTON — remove before release ──
+          IconButton(
+            icon: const Icon(Icons.bug_report, color: Colors.red),
+            tooltip: 'Debug',
+            onPressed: () => Navigator.pushNamed(context, '/debug'),
+          ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             tooltip: 'My Profile',
@@ -89,9 +96,18 @@ class _DashboardScreenState
                   _FarmSummaryCard(),
                   const SizedBox(height: 16),
 
+                  // ── Trial banner ──────────────────────
                   if (!user.isSubscribed &&
                       SubscriptionService.isTrialActive(user)) ...[
                     _TrialCard(user: user),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // ── Premium upgrade banner ────────────
+                  if (user.isSubscribed &&
+                      !user.hasPremiumAccess &&
+                      !auth.isAdmin) ...[
+                    _PremiumUpgradeCard(),
                     const SizedBox(height: 16),
                   ],
 
@@ -139,31 +155,18 @@ class _DashboardScreenState
                   _PremiumModuleGrid(modules: _agritexModules),
                   const SizedBox(height: 24),
 
-                  _PremiumSectionHeader(
-                    icon: '🌦️',
-                    title: 'Smart Environmental Monitoring',
-                    subtitle: 'Hyperlocal alerts and smart irrigation',
-                  ),
-                  const SizedBox(height: 12),
-                  _PremiumModuleGrid(modules: _environmentModules),
-                  const SizedBox(height: 24),
+                  // ── Admin section (only visible to admin) ─────────
+                  if (auth.isAdmin) ...[
+                    _PremiumSectionHeader(
+                      icon: '🛡️',
+                      title: 'Administration',
+                      subtitle: 'Manage Mudhumeni officer approvals',
+                    ),
+                    const SizedBox(height: 12),
+                    _PremiumModuleGrid(modules: _adminModules),
+                    const SizedBox(height: 24),
+                  ],
 
-                  _PremiumSectionHeader(
-                    icon: '💰',
-                    title: 'Financial Tools',
-                    subtitle: 'Cost tracking, loans and market analysis',
-                  ),
-                  const SizedBox(height: 12),
-                  _PremiumModuleGrid(modules: _financialModules),
-                  const SizedBox(height: 24),
-
-                  _PremiumSectionHeader(
-                    icon: '🗺️',
-                    title: 'Field & Inventory Management',
-                    subtitle: 'GPS mapping, stock and livestock health',
-                  ),
-                  const SizedBox(height: 12),
-                  _PremiumModuleGrid(modules: _fieldModules),
                   const SizedBox(height: 30),
                 ],
               ),
@@ -361,61 +364,14 @@ final _agritexModules = [
   ),
 ];
 
-final _environmentModules = [
+// ── Admin modules (only shown to admin role) ──────────────
+final _adminModules = [
   _Module(
-    icon: Icons.notifications_active_outlined,
-    label: 'Hyperlocal\nWeather Alerts',
-    color: const Color(0xFF0277BD),
-    route: '/weather-alerts',
-    isBuilt: false,
-  ),
-  _Module(
-    icon: Icons.schedule_outlined,
-    label: 'Irrigation\nScheduling',
-    color: const Color(0xFF0277BD),
-    route: '/irrigation-scheduling',
-    isBuilt: false,
-  ),
-];
-
-final _financialModules = [
-  _Module(
-    icon: Icons.price_change_outlined,
-    label: 'Input Cost vs\nMarket Price',
-    color: const Color(0xFFE65100),
-    route: '/cost-market',
-    isBuilt: false,
-  ),
-  _Module(
-    icon: Icons.account_balance_outlined,
-    label: 'Loan & Credit\nManager',
-    color: const Color(0xFFE65100),
-    route: '/loan-manager',
-    isBuilt: false,
-  ),
-];
-
-final _fieldModules = [
-  _Module(
-    icon: Icons.satellite_alt_outlined,
-    label: 'GPS Field\nMapping',
-    color: const Color(0xFF4E342E),
-    route: '/gps-mapping',
-    isBuilt: false,
-  ),
-  _Module(
-    icon: Icons.inventory_2_outlined,
-    label: 'Input Inventory\nTracker',
-    color: const Color(0xFF4E342E),
-    route: '/inventory',
-    isBuilt: false,
-  ),
-  _Module(
-    icon: Icons.vaccines_outlined,
-    label: 'Livestock Health\nRecords',
-    color: const Color(0xFF4E342E),
-    route: '/livestock-health',
-    isBuilt: false,
+    icon: Icons.admin_panel_settings_outlined,
+    label: 'Admin\nPanel',
+    color: const Color(0xFF1B5E20),
+    route: '/admin-panel',
+    isBuilt: true,
   ),
 ];
 
@@ -515,7 +471,7 @@ class _WelcomeCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Mhoro! 👋',
+                  Text('Kwaziwa/Sawubona! 👋',
                       style: AppTextStyles.bodySmall
                           .copyWith(color: Colors.white70)),
                   Text(user.fullName,
@@ -759,6 +715,41 @@ class _TrialCard extends StatelessWidget {
             onPressed: () =>
                 Navigator.pushNamed(context, '/paywall'),
             child: const Text('Upgrade'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Premium upgrade card ──────────────────────────────────
+class _PremiumUpgradeCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7B2D8B).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: const Color(0xFF7B2D8B).withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Text('👑', style: TextStyle(fontSize: 22)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Unlock AI, farm management & all premium '
+              'features for \$1.99 / 60 days.',
+              style: AppTextStyles.bodySmall,
+            ),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pushNamed(context, '/paywall'),
+            child: const Text('Upgrade',
+                style: TextStyle(color: Color(0xFF7B2D8B))),
           ),
         ],
       ),

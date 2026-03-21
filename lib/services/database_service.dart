@@ -40,7 +40,7 @@ class DatabaseService {
     final String dbPath = await _resolveDbPath();
     return await openDatabase(
       dbPath,
-      version: 8,
+      version: 11,                   // ← bumped to 11
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -81,7 +81,9 @@ class DatabaseService {
         premium_expires_at TEXT,
         security_question TEXT,
         security_answer_hash TEXT,
-        password_hash TEXT
+        password_hash TEXT,
+        role TEXT NOT NULL DEFAULT 'farmer',
+        ward TEXT NOT NULL DEFAULT ''
       )
     ''');
 
@@ -239,6 +241,30 @@ class DatabaseService {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS qa_upvotes (
+        user_id TEXT NOT NULL,
+        question_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, question_id)
+      )
+    ''');
+
+    // ── v11: Role notifications ─────────────────────────
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS role_notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        from_role TEXT NOT NULL DEFAULT '',
+        from_name TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
     await FarmManagementDatabaseService.createTables(db);
     await PayrollFieldReportDatabaseService.createTables(db);
     await SosDatabaseService.createTables(db);
@@ -272,9 +298,48 @@ class DatabaseService {
     if (oldVersion < 8) {
       await MudhumeniDatabaseService.createTables(db);
     }
+    if (oldVersion < 9) {
+      try {
+        await db.execute(
+          "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'farmer'",
+        );
+      } catch (_) {}
+    }
+    if (oldVersion < 10) {
+      try {
+        await db.execute(
+          "ALTER TABLE users ADD COLUMN ward TEXT NOT NULL DEFAULT ''",
+        );
+      } catch (_) {}
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS qa_upvotes (
+          user_id TEXT NOT NULL,
+          question_id INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (user_id, question_id)
+        )
+      ''');
+    }
+    if (oldVersion < 11) {
+      // Role notifications table for demotion/removal alerts
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS role_notifications (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          reason TEXT NOT NULL DEFAULT '',
+          from_role TEXT NOT NULL DEFAULT '',
+          from_name TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          is_read INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+    }
   }
 
-  // USER OPERATIONS — unchanged
+  // ── USER OPERATIONS ───────────────────────────────────────────────────────
+
   Future<void> insertUser(UserModel user) async {
     final db = await database;
     await db.insert('users', user.toMap(),
@@ -345,6 +410,158 @@ class DatabaseService {
       whereArgs: [phone],
     );
   }
+
+  Future<void> updateUserWard(String userId, String ward) async {
+    final db = await database;
+    await db.update(
+      'users',
+      {'ward': ward},
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  // ── ROLE MANAGEMENT ───────────────────────────────────────────────────────
+
+  /// Update a user's role in the DB
+  Future<void> updateUserRole(String userId, String newRole) async {
+    final db = await database;
+    await db.update(
+      'users',
+      {'role': newRole},
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  /// Hard-delete a user and all their data.
+  /// Farmers' ward links remain — they just have no mudhumeni until reassigned.
+  Future<void> deleteUser(String userId) async {
+    final db = await database;
+    for (final table in [
+      'users', 'farm_profiles', 'crop_records', 'livestock_records',
+      'finance_transactions', 'ai_diagnosis_history', 'ai_yield_history',
+      'ai_chat_history', 'irrigation_logs', 'irrigation_setups',
+      'soil_records', 'farm_alerts',
+    ]) {
+      try {
+        await db.delete(table, where: 'user_id = ?', whereArgs: [userId]);
+      } catch (_) {}
+    }
+  }
+
+  // ── HIERARCHY QUERIES ─────────────────────────────────────────────────────
+
+  /// Get all users with a specific role (optional area filter)
+  Future<List<UserModel>> getUsersByRole(
+    String role, {
+    String? province,
+    String? district,
+    String? ward,
+  }) async {
+    final db = await database;
+    String where = 'role = ?';
+    final args = <dynamic>[role];
+    if (province != null && province.isNotEmpty) {
+      where += ' AND province = ?';
+      args.add(province);
+    }
+    if (district != null && district.isNotEmpty) {
+      where += ' AND district = ?';
+      args.add(district);
+    }
+    if (ward != null && ward.isNotEmpty) {
+      where += ' AND ward = ?';
+      args.add(ward);
+    }
+    final maps = await db.query(
+      'users',
+      where: where,
+      whereArgs: args,
+      orderBy: 'full_name ASC',
+    );
+    return maps.map(UserModel.fromMap).toList();
+  }
+
+  /// Get farmers in a specific ward
+  Future<List<UserModel>> getFarmersByWard(String ward) async {
+    return getUsersByRole('farmer', ward: ward);
+  }
+
+  /// Get all users visible to a given authority based on their area
+  Future<List<UserModel>> getUsersUnderAuthority(UserModel authority) async {
+    final db = await database;
+    String where;
+    final args = <dynamic>[];
+
+    switch (authority.normalizedRole) {
+      case 'national_admin':
+        // Sees everyone except themselves
+        where = 'user_id != ?';
+        args.add(authority.userId);
+        break;
+      case 'provincial_admin':
+        where = 'province = ? AND user_id != ?';
+        args.addAll([authority.province, authority.userId]);
+        break;
+      case 'district_admin':
+        where = 'district = ? AND user_id != ?';
+        args.addAll([authority.district, authority.userId]);
+        break;
+      case 'mudhumeni':
+        // Mudhumeni only sees farmers in their ward
+        where = 'ward = ? AND role = ? AND user_id != ?';
+        args.addAll([authority.ward, 'farmer', authority.userId]);
+        break;
+      default:
+        return [];
+    }
+
+    final maps = await db.query(
+      'users',
+      where: where,
+      whereArgs: args,
+      orderBy: 'role ASC, full_name ASC',
+    );
+    return maps.map(UserModel.fromMap).toList();
+  }
+
+  // ── ROLE NOTIFICATIONS ────────────────────────────────────────────────────
+
+  /// Insert a demotion/removal notification for a user
+  Future<void> insertRoleNotification(RoleNotification notification) async {
+    final db = await database;
+    await db.insert(
+      'role_notifications',
+      notification.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get unread notifications for a user
+  Future<List<RoleNotification>> getUnreadNotifications(String userId) async {
+    final db = await database;
+    final maps = await db.query(
+      'role_notifications',
+      where: 'user_id = ? AND is_read = 0',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+    return maps.map(RoleNotification.fromMap).toList();
+  }
+
+  /// Mark all notifications as read for a user
+  Future<void> markNotificationsRead(String userId) async {
+    final db = await database;
+    await db.update(
+      'role_notifications',
+      {'is_read': 1},
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  // ── EXISTING OPERATIONS — unchanged ──────────────────────────────────────
 
   Future<int> getNextUserNumber(String districtCode) async {
     final db = await database;

@@ -24,11 +24,12 @@ class _PublicQaScreenState extends State<PublicQaScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabs;
   List<QaQuestion> _questions = [];
+  Set<int> _upvotedIds = {}; // question IDs this user has already agreed to
   bool _loading = true;
-  String _sort = 'newest'; // 'newest' | 'upvotes' | 'unanswered'
+  String _sort = 'newest';
 
-  String get _ward =>
-      context.read<AuthProvider>().user?.district ?? 'General';
+  String get _ward => context.read<AuthProvider>().user?.ward ?? '';
+  String get _userId => context.read<AuthProvider>().user?.userId ?? '';
 
   @override
   void initState() {
@@ -44,9 +45,19 @@ class _PublicQaScreenState extends State<PublicQaScreen>
   }
 
   Future<void> _load() async {
+    if (_ward.isEmpty) {
+      setState(() { _loading = false; });
+      return;
+    }
     final questions =
         await MudhumeniDatabaseService.getPublicQuestions(_ward);
-    setState(() { _questions = questions; _loading = false; });
+    final upvoted =
+        await MudhumeniDatabaseService.getUserUpvotedIds(_userId);
+    setState(() {
+      _questions = questions;
+      _upvotedIds = upvoted.toSet();
+      _loading = false;
+    });
   }
 
   List<QaQuestion> get _sorted {
@@ -64,8 +75,29 @@ class _PublicQaScreenState extends State<PublicQaScreen>
     return list;
   }
 
+  Future<void> _handleToggleUpvote(int questionId) async {
+    await MudhumeniDatabaseService.toggleUpvote(questionId, _userId);
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final ward = auth.user?.ward ?? '';
+
+    // Ward not set yet — show ward setup prompt
+    if (!_loading && ward.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Public Q&A')),
+        body: _WardSetupPrompt(
+          onWardSaved: () {
+            setState(() => _loading = true);
+            _load();
+          },
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Public Q&A'),
@@ -82,17 +114,15 @@ class _PublicQaScreenState extends State<PublicQaScreen>
         children: [
           _QuestionsTab(
             questions: _sorted,
+            upvotedIds: _upvotedIds,
             loading: _loading,
             sort: _sort,
             onSortChanged: (v) => setState(() => _sort = v),
             onRefresh: _load,
-            onUpvote: (id) async {
-              await MudhumeniDatabaseService.upvoteQuestion(id);
-              _load();
-            },
-            onAnswer: (id, ans, by) async {
+            onToggleUpvote: _handleToggleUpvote,
+            onAnswer: (id, ans, by, byMudhumeni) async {
               await MudhumeniDatabaseService.answerQuestion(
-                  id, ans, by, false);
+                  id, ans, by, byMudhumeni);
               _load();
             },
           ),
@@ -125,9 +155,15 @@ class _PrivateQaScreenState extends State<PrivateQaScreen>
   late TabController _tabs;
   List<QaQuestion> _questions = [];
   bool _loading = true;
+  List<MudhumeniProfile> _wardMudhumeni = [];
+  MudhumeniProfile? _selectedMudhumeni;
 
-  // Stub mudhumeni ID — in production this comes from the linked mudhumeni
-  static const _stubMudhumeniId = 'mudhumeni_001';
+  String get _ward => context.read<AuthProvider>().user?.ward ?? '';
+  String get _userId => context.read<AuthProvider>().user?.userId ?? '';
+  bool get _isMudhumeniOrAdmin {
+    final auth = context.read<AuthProvider>();
+    return auth.isMudhumeni || auth.isAdmin;
+  }
 
   @override
   void initState() {
@@ -143,37 +179,157 @@ class _PrivateQaScreenState extends State<PrivateQaScreen>
   }
 
   Future<void> _load() async {
-    final user = context.read<AuthProvider>().user;
-    final questions = await MudhumeniDatabaseService.getPrivateQuestions(
-        user?.userId ?? '', _stubMudhumeniId);
-    setState(() { _questions = questions; _loading = false; });
+    if (_ward.isEmpty) {
+      setState(() { _loading = false; });
+      return;
+    }
+
+    if (_isMudhumeniOrAdmin) {
+      // Mudhumeni sees private questions sent to their userId
+      final questions = await MudhumeniDatabaseService
+          .getPrivateQuestions('', _userId);
+      setState(() { _questions = questions; _loading = false; });
+    } else {
+      // Farmer — load verified mudhumeni in their ward first
+      final wardMudhumeni = await MudhumeniDatabaseService
+          .getVerifiedMudhumeniByWard(_ward);
+      if (_selectedMudhumeni == null && wardMudhumeni.isNotEmpty) {
+        _selectedMudhumeni = wardMudhumeni.first;
+      }
+      final questions = _selectedMudhumeni != null
+          ? await MudhumeniDatabaseService.getPrivateQuestions(
+              _userId, _selectedMudhumeni!.userId)
+          : <QaQuestion>[];
+      setState(() {
+        _wardMudhumeni = wardMudhumeni;
+        _questions = questions;
+        _loading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final ward = auth.user?.ward ?? '';
+    final isMudhumeniOrAdmin = auth.isMudhumeni || auth.isAdmin;
+
+    // Ward not set yet — show ward setup prompt
+    if (!_loading && ward.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Private Q&A')),
+        body: _WardSetupPrompt(
+          onWardSaved: () {
+            setState(() => _loading = true);
+            _load();
+          },
+        ),
+      );
+    }
+
+    // Farmer with no mudhumeni in their ward
+    if (!_loading && !isMudhumeniOrAdmin && _wardMudhumeni.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Private Q&A')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.person_search_outlined,
+                    size: 64, color: AppColors.textHint),
+                const SizedBox(height: 16),
+                Text('No Mudhumeni in Your Ward',
+                    style: AppTextStyles.heading3,
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 10),
+                Text(
+                  'There are no verified Mudhumeni extension officers '
+                  'in $ward yet. Check back later or use Public Q&A.',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.body
+                      .copyWith(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Private Q&A')),
+      appBar: AppBar(
+        title: const Text('Private Q&A'),
+        // Mudhumeni picker only if farmer has multiple mudhumeni in ward
+        bottom: (!isMudhumeniOrAdmin && _wardMudhumeni.length > 1)
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(52),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: DropdownButtonFormField<MudhumeniProfile>(
+                    value: _selectedMudhumeni,
+                    dropdownColor: AppColors.primaryDark,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white12,
+                      border: OutlineInputBorder(
+                          borderSide: BorderSide.none),
+                    ),
+                    items: _wardMudhumeni
+                        .map((m) => DropdownMenuItem(
+                              value: m,
+                              child: Text(m.fullName,
+                                  style: const TextStyle(
+                                      color: Colors.white)),
+                            ))
+                        .toList(),
+                    onChanged: (m) {
+                      setState(() {
+                        _selectedMudhumeni = m;
+                        _loading = true;
+                      });
+                      _load();
+                    },
+                  ),
+                ),
+              )
+            : null,
+      ),
       body: TabBarView(
         controller: _tabs,
         children: [
           _PrivateThreadTab(
             questions: _questions,
             loading: _loading,
+            isMudhumeniOrAdmin: isMudhumeniOrAdmin,
             onRefresh: _load,
             onMakePublic: (id) async {
               await MudhumeniDatabaseService.makePublic(id);
               _load();
             },
-          ),
-          _AskTab(
-            ward: context.read<AuthProvider>().user?.district ?? '',
-            isPublic: false,
-            mudhumeniId: _stubMudhumeniId,
-            onAsked: () {
+            onAnswer: (id, ans) async {
+              final name = auth.user?.fullName ?? 'Mudhumeni';
+              await MudhumeniDatabaseService.answerQuestion(
+                  id, ans, name, true);
               _load();
-              _tabs.animateTo(0);
             },
           ),
+          if (!isMudhumeniOrAdmin)
+            _AskTab(
+              ward: _ward,
+              isPublic: false,
+              mudhumeniId: _selectedMudhumeni?.userId ?? '',
+              onAsked: () {
+                _load();
+                _tabs.animateTo(0);
+              },
+            )
+          else
+            const _MudhumeniInfoPanel(),
         ],
       ),
       bottomNavigationBar: TabBar(
@@ -181,29 +337,127 @@ class _PrivateQaScreenState extends State<PrivateQaScreen>
         labelColor: AppColors.primary,
         unselectedLabelColor: AppColors.textHint,
         indicatorColor: AppColors.primary,
-        tabs: const [Tab(text: 'Thread'), Tab(text: 'Ask')],
+        tabs: [
+          const Tab(text: 'Thread'),
+          Tab(text: isMudhumeniOrAdmin ? 'Info' : 'Ask'),
+        ],
       ),
     );
   }
 }
 
-// ── Shared: Questions list tab ────────────────────────────
+// ── Ward Setup Prompt ─────────────────────────────────────
+class _WardSetupPrompt extends StatefulWidget {
+  final VoidCallback onWardSaved;
+  const _WardSetupPrompt({required this.onWardSaved});
+
+  @override
+  State<_WardSetupPrompt> createState() => _WardSetupPromptState();
+}
+
+class _WardSetupPromptState extends State<_WardSetupPrompt> {
+  final _wardCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _wardCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final ward = _wardCtrl.text.trim();
+    if (ward.isEmpty) return;
+    setState(() => _saving = true);
+    await context.read<AuthProvider>().updateUserWard(ward);
+    setState(() => _saving = false);
+    widget.onWardSaved();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.location_on_outlined,
+                size: 56, color: AppColors.primary),
+          ),
+          const SizedBox(height: 20),
+          Text('Set Your Ward',
+              style: AppTextStyles.heading2
+                  .copyWith(color: AppColors.textPrimary)),
+          const SizedBox(height: 10),
+          Text(
+            'Register your ward to connect with Mudhumeni officers '
+            'and farmers in your area.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body
+                .copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 28),
+          TextField(
+            controller: _wardCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Your Ward *',
+              hintText: 'e.g. Ward 5 — Gutu',
+              prefixIcon:
+                  Icon(Icons.map_outlined, color: AppColors.primary),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 52),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.save_outlined, color: Colors.white),
+              label: Text(_saving ? 'Saving...' : 'Save Ward',
+                  style: AppTextStyles.button),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Questions list tab ────────────────────────────────────
 class _QuestionsTab extends StatelessWidget {
   final List<QaQuestion> questions;
+  final Set<int> upvotedIds;
   final bool loading;
   final String sort;
   final ValueChanged<String> onSortChanged;
   final VoidCallback onRefresh;
-  final Function(int) onUpvote;
-  final Function(int, String, String) onAnswer;
+  final Function(int) onToggleUpvote;
+  final Function(int, String, String, bool) onAnswer;
 
   const _QuestionsTab({
     required this.questions,
+    required this.upvotedIds,
     required this.loading,
     required this.sort,
     required this.onSortChanged,
     required this.onRefresh,
-    required this.onUpvote,
+    required this.onToggleUpvote,
     required this.onAnswer,
   });
 
@@ -213,7 +467,6 @@ class _QuestionsTab extends StatelessWidget {
 
     return Column(
       children: [
-        // Sort chips
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(
@@ -222,7 +475,7 @@ class _QuestionsTab extends StatelessWidget {
               const SizedBox(width: 6),
               for (final s in [
                 ('newest', 'Newest'),
-                ('upvotes', 'Most Voted'),
+                ('upvotes', 'Most Agreed'),
                 ('unanswered', 'Unanswered'),
               ])
                 Padding(
@@ -278,9 +531,12 @@ class _QuestionsTab extends StatelessWidget {
                   itemCount: questions.length,
                   itemBuilder: (context, i) => _QuestionCard(
                     q: questions[i],
-                    onUpvote: () => onUpvote(questions[i].id!),
-                    onAnswer: (ans, by) =>
-                        onAnswer(questions[i].id!, ans, by),
+                    hasUpvoted:
+                        upvotedIds.contains(questions[i].id),
+                    onToggleUpvote: () =>
+                        onToggleUpvote(questions[i].id!),
+                    onAnswer: (ans, by, byMud) =>
+                        onAnswer(questions[i].id!, ans, by, byMud),
                   ),
                 ),
         ),
@@ -291,14 +547,22 @@ class _QuestionsTab extends StatelessWidget {
 
 class _QuestionCard extends StatelessWidget {
   final QaQuestion q;
-  final VoidCallback onUpvote;
-  final Function(String, String) onAnswer;
+  final bool hasUpvoted;
+  final VoidCallback onToggleUpvote;
+  final Function(String, String, bool) onAnswer;
 
-  const _QuestionCard(
-      {required this.q, required this.onUpvote, required this.onAnswer});
+  const _QuestionCard({
+    required this.q,
+    required this.hasUpvoted,
+    required this.onToggleUpvote,
+    required this.onAnswer,
+  });
 
   void _showAnswerDialog(BuildContext context) {
     final ctrl = TextEditingController();
+    final auth = context.read<AuthProvider>();
+    final isMudhumeniOrAdmin = auth.isMudhumeni || auth.isAdmin;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -306,8 +570,8 @@ class _QuestionCard extends StatelessWidget {
         content: TextField(
           controller: ctrl,
           maxLines: 4,
-          decoration: const InputDecoration(
-              hintText: 'Type your answer here...'),
+          decoration:
+              const InputDecoration(hintText: 'Type your answer here...'),
         ),
         actions: [
           TextButton(
@@ -316,7 +580,11 @@ class _QuestionCard extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               if (ctrl.text.trim().isNotEmpty) {
-                onAnswer(ctrl.text.trim(), 'Me');
+                onAnswer(
+                  ctrl.text.trim(),
+                  auth.user?.fullName ?? 'User',
+                  isMudhumeniOrAdmin,
+                );
                 Navigator.pop(context);
               }
             },
@@ -329,6 +597,8 @@ class _QuestionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final canAnswer = auth.isMudhumeni || auth.isAdmin;
     final date = DateTime.tryParse(q.createdAt);
     final dateStr =
         date != null ? DateFormat('dd MMM').format(date) : '';
@@ -388,13 +658,26 @@ class _QuestionCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.verified,
-                            color: AppColors.success, size: 14),
+                        Icon(
+                          q.answeredByMudhumeni
+                              ? Icons.verified
+                              : Icons.person_outline,
+                          color: q.answeredByMudhumeni
+                              ? AppColors.success
+                              : AppColors.textSecondary,
+                          size: 14,
+                        ),
                         const SizedBox(width: 4),
-                        Text(q.answeredBy,
-                            style: AppTextStyles.caption.copyWith(
-                                color: AppColors.success,
-                                fontWeight: FontWeight.w600)),
+                        Text(
+                          q.answeredByMudhumeni
+                              ? '${q.answeredBy} · Mudhumeni'
+                              : q.answeredBy,
+                          style: AppTextStyles.caption.copyWith(
+                              color: q.answeredByMudhumeni
+                                  ? AppColors.success
+                                  : AppColors.textSecondary,
+                              fontWeight: FontWeight.w600),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -406,21 +689,54 @@ class _QuestionCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
+                // Toggle agree — one per user, filled when agreed
                 GestureDetector(
-                  onTap: onUpvote,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.thumb_up_outlined,
-                          size: 16, color: AppColors.info),
-                      const SizedBox(width: 4),
-                      Text('${q.upvotes} agree',
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.info)),
-                    ],
+                  onTap: onToggleUpvote,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: hasUpvoted
+                          ? AppColors.info.withOpacity(0.12)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: hasUpvoted
+                            ? AppColors.info
+                            : AppColors.divider,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          hasUpvoted
+                              ? Icons.thumb_up
+                              : Icons.thumb_up_outlined,
+                          size: 14,
+                          color: hasUpvoted
+                              ? AppColors.info
+                              : AppColors.textHint,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '${q.upvotes} agree',
+                          style: AppTextStyles.caption.copyWith(
+                            color: hasUpvoted
+                                ? AppColors.info
+                                : AppColors.textHint,
+                            fontWeight: hasUpvoted
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const Spacer(),
-                if (!isAnswered)
+                if (canAnswer && !isAnswered)
                   TextButton(
                     onPressed: () => _showAnswerDialog(context),
                     child: const Text('Answer',
@@ -439,15 +755,49 @@ class _QuestionCard extends StatelessWidget {
 class _PrivateThreadTab extends StatelessWidget {
   final List<QaQuestion> questions;
   final bool loading;
+  final bool isMudhumeniOrAdmin;
   final VoidCallback onRefresh;
   final Function(int) onMakePublic;
+  final Function(int, String) onAnswer;
 
   const _PrivateThreadTab({
     required this.questions,
     required this.loading,
+    required this.isMudhumeniOrAdmin,
     required this.onRefresh,
     required this.onMakePublic,
+    required this.onAnswer,
   });
+
+  void _showReplyDialog(BuildContext context, int questionId) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Reply to question'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 4,
+          decoration:
+              const InputDecoration(hintText: 'Type your reply here...'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (ctrl.text.trim().isNotEmpty) {
+                onAnswer(questionId, ctrl.text.trim());
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Send Reply'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -460,9 +810,13 @@ class _PrivateThreadTab extends StatelessWidget {
             const Icon(Icons.lock_outline,
                 size: 64, color: AppColors.textHint),
             const SizedBox(height: 12),
-            Text('No private questions yet.',
-                style: AppTextStyles.body
-                    .copyWith(color: AppColors.textSecondary)),
+            Text(
+              isMudhumeniOrAdmin
+                  ? 'No private questions from farmers yet.'
+                  : 'No private questions yet.',
+              style: AppTextStyles.body
+                  .copyWith(color: AppColors.textSecondary),
+            ),
           ],
         ),
       );
@@ -472,6 +826,7 @@ class _PrivateThreadTab extends StatelessWidget {
       itemCount: questions.length,
       itemBuilder: (context, i) {
         final q = questions[i];
+        final isAnswered = q.answer.isNotEmpty;
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           shape: RoundedRectangleBorder(
@@ -489,13 +844,19 @@ class _PrivateThreadTab extends StatelessWidget {
                     Text('Private',
                         style: AppTextStyles.caption
                             .copyWith(color: AppColors.textHint)),
+                    if (isMudhumeniOrAdmin) ...[
+                      const Spacer(),
+                      Text('From: ${q.authorName}',
+                          style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textSecondary)),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 6),
                 Text(q.question,
                     style: AppTextStyles.body
                         .copyWith(fontWeight: FontWeight.w600)),
-                if (q.answer.isNotEmpty) ...[
+                if (isAnswered) ...[
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -503,31 +864,89 @@ class _PrivateThreadTab extends StatelessWidget {
                       color: AppColors.primary.withOpacity(0.06),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(q.answer,
-                        style: AppTextStyles.bodySmall),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.verified,
+                                size: 12, color: AppColors.success),
+                            const SizedBox(width: 4),
+                            Text(q.answeredBy,
+                                style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(q.answer, style: AppTextStyles.bodySmall),
+                      ],
+                    ),
                   ),
-                  if (!q.madePublic) ...[
+                  if (!q.madePublic && isMudhumeniOrAdmin) ...[
                     const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: () => onMakePublic(q.id!),
-                      icon: const Icon(Icons.public_outlined,
-                          size: 14),
+                      icon: const Icon(Icons.public_outlined, size: 14),
                       label: const Text('Make Public',
                           style: TextStyle(fontSize: 12)),
                     ),
                   ],
-                ] else
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text('Awaiting reply from mudhumeni...',
+                ] else ...[
+                  const SizedBox(height: 8),
+                  if (isMudhumeniOrAdmin)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            _showReplyDialog(context, q.id!),
+                        icon:
+                            const Icon(Icons.reply_outlined, size: 16),
+                        label: const Text('Reply'),
+                      ),
+                    )
+                  else
+                    Text('Awaiting reply from Mudhumeni...',
                         style: AppTextStyles.caption
                             .copyWith(color: AppColors.textHint)),
-                  ),
+                ],
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+// ── Mudhumeni info panel ──────────────────────────────────
+class _MudhumeniInfoPanel extends StatelessWidget {
+  const _MudhumeniInfoPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.lock_outline,
+              size: 56, color: AppColors.textHint),
+          const SizedBox(height: 16),
+          Text('Private Questions from Farmers',
+              style: AppTextStyles.heading3,
+              textAlign: TextAlign.center),
+          const SizedBox(height: 10),
+          Text(
+            'Farmers in your ward send you questions privately. '
+            'Reply to them in the Thread tab. '
+            'You can make answered questions public so other farmers can benefit.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body
+                .copyWith(color: AppColors.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -607,7 +1026,7 @@ class _AskTabState extends State<_AskTab> {
                   child: Text(
                     widget.isPublic
                         ? 'Public questions are visible to all farmers in your ward.'
-                        : 'Private questions go directly to your mudhumeni only.',
+                        : 'Private questions go directly to your Mudhumeni only.',
                     style: const TextStyle(
                         fontSize: 12, color: AppColors.info),
                   ),
@@ -624,7 +1043,7 @@ class _AskTabState extends State<_AskTab> {
               alignLabelWithHint: true,
               hintText: widget.isPublic
                   ? 'e.g. Why are my maize leaves curling?'
-                  : 'Ask your mudhumeni a private question...',
+                  : 'Ask your Mudhumeni a private question...',
               prefixIcon: const Padding(
                 padding: EdgeInsets.only(bottom: 80),
                 child: Icon(Icons.help_outline, color: AppColors.primary),

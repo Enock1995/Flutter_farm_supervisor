@@ -71,8 +71,11 @@ import 'screens/mudhumeni/mudhumeni_registration_screen.dart';
 import 'screens/mudhumeni/knowledge_posts_screen.dart';
 import 'screens/mudhumeni/qa_screens.dart';
 import 'screens/mudhumeni/community_fieldvisits_screens.dart';
-// ── Problem Heatmap import ───────────────────────────────
 import 'screens/mudhumeni/problem_heatmap_screen.dart';
+import 'screens/mudhumeni/area_management_screen.dart';
+// ── Admin ────────────────────────────────────────────────
+import 'screens/admin/admin_panel_screen.dart';
+import 'screens/debug/debug_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -178,7 +181,7 @@ class AgricAssistApp extends StatelessWidget {
 
           // ── AGRITEX Mudhumeni Network ─────────────────
           '/mudhumeni-registration': (context) => const _PremiumGate(child: MudhumeniRegistrationScreen()),
-          '/area-management':        (context) => const _PremiumGate(child: AreaManagementScreen()),
+          '/area-management':        (context) => const _PremiumGate(child: _AuthorityGate(child: AreaManagementScreen())),
           '/knowledge-posts':        (context) => const _PremiumGate(child: KnowledgePostsScreen()),
           '/public-qa':              (context) => const _PremiumGate(child: PublicQaScreen()),
           '/private-qa':             (context) => const _PremiumGate(child: PrivateQaScreen()),
@@ -186,6 +189,10 @@ class AgricAssistApp extends StatelessWidget {
           '/field-visits':           (context) => const _PremiumGate(child: FieldVisitsScreen()),
           '/seasonal-calendar':      (context) => const _PremiumGate(child: SeasonalCalendarScreen()),
           '/problem-heatmap':        (context) => const _PremiumGate(child: ProblemHeatmapScreen()),
+
+          // ── Admin panel (hierarchy-aware) ─────────────
+          '/admin-panel':            (context) => _AdminGate(child: AdminPanelScreen()),
+          '/debug':                  (context) => const DebugScreen(),
         },
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const LoginScreen(),
@@ -195,6 +202,11 @@ class AgricAssistApp extends StatelessWidget {
   }
 }
 
+// =============================================================================
+// GATES
+// =============================================================================
+
+// ── Subscription gate ─────────────────────────────────────
 class _SubscriptionGate extends StatelessWidget {
   final Widget child;
   const _SubscriptionGate({required this.child});
@@ -208,16 +220,230 @@ class _SubscriptionGate extends StatelessWidget {
   }
 }
 
+// ── Premium gate — all admin levels bypass ────────────────
 class _PremiumGate extends StatelessWidget {
   final Widget child;
   const _PremiumGate({required this.child});
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
+    final auth = context.watch<AuthProvider>();
+    final user = auth.user;
     if (user == null) return const LoginScreen();
     if (SubscriptionService.isSoftLocked(user)) return const PaywallScreen();
+    // All authority levels (district, provincial, national) bypass premium gate
+    if (auth.isAdmin) return child;
     if (SubscriptionService.isPremiumLocked(user)) return const PaywallScreen();
     return child;
   }
+}
+
+// ── Mudhumeni gate — mudhumeni or any admin ───────────────
+class _MudhumeniGate extends StatelessWidget {
+  final Widget child;
+  const _MudhumeniGate({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (auth.isMudhumeni || auth.isAdmin) return child;
+    return _accessDenied(
+      context,
+      title: 'Mudhumeni Access Only',
+      message:
+          'This section is reserved for verified AGRITEX Mudhumeni '
+          'extension officers. Register as a Mudhumeni to request access.',
+      actionLabel: 'Register as Mudhumeni',
+      actionRoute: '/mudhumeni-registration',
+      color: const Color(0xFF558B2F),
+    );
+  }
+}
+
+// ── Authority gate — mudhumeni or any admin (for area management) ─
+class _AuthorityGate extends StatelessWidget {
+  final Widget child;
+  const _AuthorityGate({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (auth.isAnyAuthority) return child;
+    return _accessDenied(
+      context,
+      title: 'Authority Access Only',
+      message:
+          'This section is for verified Mudhumeni officers and AGRITEX '
+          'administrators. Register as a Mudhumeni to request access.',
+      actionLabel: 'Register as Mudhumeni',
+      actionRoute: '/mudhumeni-registration',
+      color: const Color(0xFF558B2F),
+    );
+  }
+}
+
+// ── Admin gate — district, provincial or national admin ───
+class _AdminGate extends StatelessWidget {
+  final Widget child;
+  const _AdminGate({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (auth.isAdmin) return child;
+    return _accessDenied(
+      context,
+      title: 'Admin Access Required',
+      message: 'This section is restricted to AGRITEX administrators.',
+      color: AppColors.primaryDark,
+    );
+  }
+}
+
+// ── Shared access denied widget ───────────────────────────
+Widget _accessDenied(
+  BuildContext context, {
+  required String title,
+  required String message,
+  Color color = AppColors.primaryDark,
+  String? actionLabel,
+  String? actionRoute,
+}) {
+  return Scaffold(
+    appBar: AppBar(
+      backgroundColor: color,
+      foregroundColor: Colors.white,
+      title: const Text('Access Restricted'),
+    ),
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline, size: 64, color: color),
+            const SizedBox(height: 16),
+            Text(title,
+                style: AppTextStyles.heading2
+                    .copyWith(color: AppColors.textPrimary),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body
+                    .copyWith(color: AppColors.textSecondary)),
+            if (actionLabel != null && actionRoute != null) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: color,
+                    foregroundColor: Colors.white),
+                onPressed: () =>
+                    Navigator.pushNamed(context, actionRoute),
+                icon: const Icon(Icons.app_registration),
+                label: Text(actionLabel),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+// =============================================================================
+// ROLE NOTIFICATION OVERLAY
+// Wrap DashboardScreen with this to show notification dialogs on login
+// =============================================================================
+class RoleNotificationOverlay extends StatefulWidget {
+  final Widget child;
+  const RoleNotificationOverlay({required this.child, super.key});
+
+  @override
+  State<RoleNotificationOverlay> createState() =>
+      _RoleNotificationOverlayState();
+}
+
+class _RoleNotificationOverlayState
+    extends State<RoleNotificationOverlay> {
+  bool _checked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  Future<void> _check() async {
+    if (_checked) return;
+    _checked = true;
+    final auth = context.read<AuthProvider>();
+    if (!auth.hasNotifications) return;
+
+    for (final n in auth.pendingNotifications) {
+      if (!mounted) break;
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: Row(
+            children: [
+              const Text('🔔 '),
+              Expanded(
+                  child: Text(n.title,
+                      style: AppTextStyles.heading3)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(n.message, style: AppTextStyles.body),
+              if (n.reason.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppColors.warning.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Reason given:',
+                          style: AppTextStyles.caption.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.warning)),
+                      const SizedBox(height: 4),
+                      Text(n.reason,
+                          style: AppTextStyles.bodySmall),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                'From: ${n.fromName} (${n.fromRole.replaceAll('_', ' ')})',
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textHint),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK, I understand'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    await auth.markNotificationsRead();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

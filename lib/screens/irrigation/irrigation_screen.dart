@@ -1,14 +1,17 @@
 // lib/screens/irrigation/irrigation_screen.dart
 // Developed by Sir Enocks — Cor Technologies
+// Basic: My Plots, Calculator, Schedule, History
+// Premium: AI Schedule, Smart Alerts
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../constants/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/irrigation_provider.dart';
+import '../../providers/weather_provider.dart';
 import '../../services/irrigation_service.dart';
+import '../../services/ai_service.dart';
 
-// Irrigation blue accent
 const _iBlue = Color(0xFF0288D1);
 const _iBlueDark = Color(0xFF01579B);
 const _iBlueLight = Color(0xFF29B6F6);
@@ -17,25 +20,22 @@ class IrrigationScreen extends StatefulWidget {
   const IrrigationScreen({super.key});
 
   @override
-  State<IrrigationScreen> createState() =>
-      _IrrigationScreenState();
+  State<IrrigationScreen> createState() => _IrrigationScreenState();
 }
 
-class _IrrigationScreenState
-    extends State<IrrigationScreen>
+class _IrrigationScreenState extends State<IrrigationScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabs;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    // 6 tabs: 4 basic + 2 premium
+    _tabs = TabController(length: 6, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<AuthProvider>().user;
       if (user != null) {
-        context
-            .read<IrrigationProvider>()
-            .load(user.userId);
+        context.read<IrrigationProvider>().load(user.userId);
       }
     });
   }
@@ -48,6 +48,9 @@ class _IrrigationScreenState
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final isPremium = auth.user?.hasPremiumAccess ?? false;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -59,22 +62,44 @@ class _IrrigationScreenState
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           isScrollable: true,
-          tabs: const [
-            Tab(text: '💧 My Plots'),
-            Tab(text: '📐 Calculator'),
-            Tab(text: '📅 Schedule'),
-            Tab(text: '📋 History'),
+          tabs: [
+            const Tab(text: '💧 My Plots'),
+            const Tab(text: '📐 Calculator'),
+            const Tab(text: '📅 Schedule'),
+            const Tab(text: '📋 History'),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🤖 AI Schedule'),
+                  if (!isPremium) ...[
+                    const SizedBox(width: 4),
+                    const Text('👑', style: TextStyle(fontSize: 10)),
+                  ],
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🔔 Smart Alerts'),
+                  if (!isPremium) ...[
+                    const SizedBox(width: 4),
+                    const Text('👑', style: TextStyle(fontSize: 10)),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
-      floatingActionButton:
-          _AddSetupFab(tabs: _tabs),
+      floatingActionButton: _AddSetupFab(tabs: _tabs),
       body: Consumer<IrrigationProvider>(
         builder: (context, provider, _) {
           if (provider.isLoading) {
             return const Center(
-                child: CircularProgressIndicator(
-                    color: _iBlue));
+                child: CircularProgressIndicator(color: _iBlue));
           }
           return TabBarView(
             controller: _tabs,
@@ -83,6 +108,25 @@ class _IrrigationScreenState
               const _CalculatorTab(),
               _ScheduleTab(provider: provider),
               _HistoryTab(provider: provider),
+              // ── Premium tabs ──────────────────────────
+              isPremium
+                  ? _AiScheduleTab(provider: provider)
+                  : const _PremiumLockTab(
+                      feature: 'AI Irrigation Schedule',
+                      description:
+                          'Claude AI analyses your crops, growth stages and '
+                          'weather forecast to generate an optimised 7-day '
+                          'irrigation plan for every plot on your farm.',
+                    ),
+              isPremium
+                  ? _SmartAlertsTab(provider: provider)
+                  : const _PremiumLockTab(
+                      feature: 'Smart Irrigation Alerts',
+                      description:
+                          'Automatically flags overdue plots, heat stress risk, '
+                          'rain-skip opportunities and missing crop assignments — '
+                          'all in one dashboard.',
+                    ),
             ],
           );
         },
@@ -92,92 +136,802 @@ class _IrrigationScreenState
 }
 
 // =============================================================================
-// TAB 1 — MY PLOTS
+// PREMIUM LOCK TAB
+// =============================================================================
+class _PremiumLockTab extends StatelessWidget {
+  final String feature;
+  final String description;
+  const _PremiumLockTab(
+      {required this.feature, required this.description});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _iBlue.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Text('👑', style: TextStyle(fontSize: 48)),
+            ),
+            const SizedBox(height: 20),
+            Text('$feature — Premium',
+                style: AppTextStyles.heading2
+                    .copyWith(color: AppColors.textPrimary),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            Text(description,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body
+                    .copyWith(color: AppColors.textSecondary)),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              onPressed: () =>
+                  Navigator.pushNamed(context, '/paywall'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _iBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.lock_open_outlined),
+              label: const Text('Upgrade to Premium',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// TAB 5 — AI SCHEDULE (Premium)
+// =============================================================================
+class _AiScheduleTab extends StatelessWidget {
+  final IrrigationProvider provider;
+  const _AiScheduleTab({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final weather = context.watch<WeatherProvider>();
+    final schedule = provider.aiSchedule;
+
+    if (provider.aiLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: _iBlue),
+            const SizedBox(height: 20),
+            Text('Claude AI is generating your irrigation plan...',
+                style: AppTextStyles.body
+                    .copyWith(color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            Text('Analysing ${provider.activeSetups.length} plots + weather data',
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textHint)),
+          ],
+        ),
+      );
+    }
+
+    if (schedule == null) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+            const Text('🤖', style: TextStyle(fontSize: 56)),
+            const SizedBox(height: 16),
+            Text('AI Irrigation Schedule',
+                style: AppTextStyles.heading2,
+                textAlign: TextAlign.center),
+            const SizedBox(height: 10),
+            Text(
+              'Claude AI will analyse all your active plots, their crops, '
+              'growth stages and this week\'s weather forecast to generate '
+              'a personalised irrigation plan.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+
+            // Requirements checklist
+            _RequirementCheck(
+              met: provider.activeSetups.isNotEmpty,
+              label: '${provider.activeSetups.length} active plot(s) registered',
+            ),
+            _RequirementCheck(
+              met: provider.activeSetups
+                  .any((s) => s.currentCrop != null),
+              label: 'At least one crop assigned',
+            ),
+            _RequirementCheck(
+              met: weather.hasData,
+              label: 'Weather data loaded',
+            ),
+
+            if (provider.aiError != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: AppColors.error.withOpacity(0.3)),
+                ),
+                child: Text(provider.aiError!,
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.error)),
+              ),
+            ],
+
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: (provider.activeSetups.isEmpty ||
+                        !weather.hasData)
+                    ? null
+                    : () => provider.loadAiSchedule(
+                          weather: weather.current!,
+                          forecast: weather.forecast,
+                          district: auth.user?.district ?? 'Harare',
+                        ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _iBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 52),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text('Generate AI Schedule',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show schedule results
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary card
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                  colors: [_iBlueDark, _iBlue]),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text('🤖',
+                        style: TextStyle(fontSize: 24)),
+                    const SizedBox(width: 8),
+                    Text('AI Irrigation Plan',
+                        style: AppTextStyles.heading3
+                            .copyWith(color: Colors.white)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(schedule.summary,
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 13)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _AiStatChip(
+                        label: 'ETo adjusted',
+                        value:
+                            '${schedule.etoAdjusted.toStringAsFixed(1)} mm/day'),
+                    const SizedBox(width: 10),
+                    _AiStatChip(
+                        label: 'Best time',
+                        value: schedule.bestTimeToIrrigate
+                            .split('—')
+                            .first
+                            .trim()),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Rain benefit
+          if (schedule.rainBenefit.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.info.withOpacity(0.07),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: AppColors.info.withOpacity(0.25)),
+              ),
+              child: Row(
+                children: [
+                  const Text('🌧️',
+                      style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(schedule.rainBenefit,
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.info)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Water saving tip
+          if (schedule.waterSavingTip.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.success.withOpacity(0.07),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: AppColors.success.withOpacity(0.25)),
+              ),
+              child: Row(
+                children: [
+                  const Text('💡',
+                      style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(schedule.waterSavingTip,
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.success)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Per-plot schedules
+          Text('Plot-by-Plot Schedule',
+              style: AppTextStyles.heading3),
+          const SizedBox(height: 10),
+          ...schedule.schedule.map((s) => _AiPlotScheduleCard(ps: s)),
+
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: () {
+                  provider.clearAiSchedule();
+                },
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Regenerate Schedule'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequirementCheck extends StatelessWidget {
+  final bool met;
+  final String label;
+  const _RequirementCheck({required this.met, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(
+            met ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: met ? AppColors.success : AppColors.textHint,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Text(label,
+              style: AppTextStyles.body.copyWith(
+                color: met ? AppColors.textPrimary : AppColors.textHint,
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiStatChip extends StatelessWidget {
+  final String label;
+  final String value;
+  const _AiStatChip({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  color: Colors.white60, fontSize: 10)),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiPlotScheduleCard extends StatelessWidget {
+  final PlotSchedule ps;
+  const _AiPlotScheduleCard({required this.ps});
+
+  @override
+  Widget build(BuildContext context) {
+    Color priorityColor;
+    switch (ps.priority) {
+      case 'High':   priorityColor = AppColors.error;   break;
+      case 'Medium': priorityColor = AppColors.warning; break;
+      default:       priorityColor = AppColors.success;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: ps.irrigateToday
+              ? _iBlue.withOpacity(0.4)
+              : AppColors.divider,
+          width: ps.irrigateToday ? 1.5 : 1,
+        ),
+        boxShadow: ps.irrigateToday
+            ? [BoxShadow(
+                color: _iBlue.withOpacity(0.1),
+                blurRadius: 6,
+                offset: const Offset(0, 2))]
+            : null,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(ps.plotName,
+                          style: AppTextStyles.body
+                              .copyWith(fontWeight: FontWeight.w700)),
+                      Text('${ps.crop} — ${ps.stage}',
+                          style: AppTextStyles.caption
+                              .copyWith(color: _iBlue)),
+                    ],
+                  ),
+                ),
+                if (ps.irrigateToday)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _iBlue,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text('Irrigate Today',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Next: ${ps.nextIrrigationDate}',
+                      style: TextStyle(
+                          color: AppColors.success,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _MiniStat(
+                    label: 'Every',
+                    value: '${ps.frequencyDays} days'),
+                const SizedBox(width: 16),
+                _MiniStat(
+                    label: 'Apply',
+                    value:
+                        '${ps.waterMmPerEvent.toStringAsFixed(1)} mm'),
+                const SizedBox(width: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: priorityColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(ps.priority,
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: priorityColor)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(ps.reason,
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textSecondary)),
+            if (ps.alert.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                      color: AppColors.warning.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    const Text('⚠️',
+                        style: TextStyle(fontSize: 12)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(ps.alert,
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.warning)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// TAB 6 — SMART ALERTS (Premium)
+// =============================================================================
+class _SmartAlertsTab extends StatelessWidget {
+  final IrrigationProvider provider;
+  const _SmartAlertsTab({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final weather = context.watch<WeatherProvider>();
+    final alerts =
+        provider.getSmartAlerts(weather: weather.current);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Live weather context strip
+          if (weather.current != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _iBlue.withOpacity(0.07),
+                borderRadius: BorderRadius.circular(10),
+                border:
+                    Border.all(color: _iBlue.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Text('🌡️',
+                      style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${weather.current!.tempC.round()}°C  •  '
+                    '${weather.current!.humidity}% RH  •  '
+                    '${weather.current!.cityName}',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: _iBlue),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          Row(
+            children: [
+              Text('Smart Alerts', style: AppTextStyles.heading3),
+              const SizedBox(width: 8),
+              if (alerts.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('${alerts.length}',
+                      style: TextStyle(
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          if (alerts.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.success.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: AppColors.success.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Text('✅',
+                      style: TextStyle(fontSize: 28)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+                        Text('All Plots OK',
+                            style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.success)),
+                        Text(
+                          'No irrigation alerts at this time. '
+                          'All plots are within normal parameters.',
+                          style: AppTextStyles.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...alerts.map((a) => _SmartAlertCard(alert: a)),
+
+          const SizedBox(height: 20),
+
+          // Plot status overview
+          Text('Plot Status Overview',
+              style: AppTextStyles.heading3),
+          const SizedBox(height: 10),
+          ...provider.activeSetups.map((setup) {
+            final days = provider.daysSinceIrrigation(setup.id);
+            Color statusColor;
+            String statusText;
+            String statusIcon;
+
+            if (days == null) {
+              statusColor = AppColors.textHint;
+              statusText = 'Never irrigated';
+              statusIcon = '❓';
+            } else if (days == 0) {
+              statusColor = AppColors.success;
+              statusText = 'Irrigated today';
+              statusIcon = '✅';
+            } else if (days <= 2) {
+              statusColor = AppColors.success;
+              statusText = '$days day${days == 1 ? '' : 's'} ago';
+              statusIcon = '💧';
+            } else if (days <= 4) {
+              statusColor = AppColors.warning;
+              statusText = '$days days ago — monitor';
+              statusIcon = '⚠️';
+            } else {
+              statusColor = AppColors.error;
+              statusText = '$days days ago — overdue';
+              statusIcon = '🔴';
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: statusColor.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Text(statusIcon,
+                      style: const TextStyle(fontSize: 20)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+                        Text(setup.plotName,
+                            style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w600)),
+                        Text(
+                          setup.currentCrop != null
+                              ? '${setup.currentCrop} — ${setup.growthStage ?? ''}'
+                              : 'No crop assigned',
+                          style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(statusText,
+                      style: AppTextStyles.caption.copyWith(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+}
+
+class _SmartAlertCard extends StatelessWidget {
+  final SmartIrrigationAlert alert;
+  const _SmartAlertCard({required this.alert});
+
+  @override
+  Widget build(BuildContext context) {
+    Color color;
+    switch (alert.level) {
+      case 'danger':  color = AppColors.error;   break;
+      case 'warning': color = AppColors.warning; break;
+      default:        color = AppColors.info;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(alert.icon, style: const TextStyle(fontSize: 24)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(alert.title,
+                    style: AppTextStyles.body.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: color)),
+                const SizedBox(height: 4),
+                Text(alert.message,
+                    style: AppTextStyles.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// EXISTING TABS — unchanged from original
 // =============================================================================
 
 class _PlotsTab extends StatelessWidget {
   final IrrigationProvider provider;
   const _PlotsTab({required this.provider});
 
+  String _formatLitres(double litres) {
+    if (litres >= 1000000) return '${(litres / 1000000).toStringAsFixed(1)} ML';
+    if (litres >= 1000) return '${(litres / 1000).toStringAsFixed(1)} kL';
+    return '${litres.toStringAsFixed(0)} L';
+  }
+
   @override
   Widget build(BuildContext context) {
     final setups = provider.activeSetups;
-
     return Column(
       children: [
-        // Summary bar
         Container(
           color: _iBlueDark,
-          padding: const EdgeInsets.fromLTRB(
-              16, 8, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
           child: Row(
-            mainAxisAlignment:
-                MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _TopStat(
-                label: 'Irrigated plots',
-                value: '${setups.length}',
-                emoji: '💧',
-              ),
-              _TopStat(
-                label: 'Total area',
-                value:
-                    '${provider.totalAreaHa.toStringAsFixed(2)} ha',
-                emoji: '📐',
-              ),
-              _TopStat(
-                label: 'Water this week',
-                value: _formatLitres(
-                    provider.weeklyWaterApplied),
-                emoji: '🪣',
-              ),
+              _TopStat(label: 'Irrigated plots',
+                  value: '${setups.length}', emoji: '💧'),
+              _TopStat(label: 'Total area',
+                  value: '${provider.totalAreaHa.toStringAsFixed(2)} ha',
+                  emoji: '📐'),
+              _TopStat(label: 'Water this week',
+                  value: _formatLitres(provider.weeklyWaterApplied),
+                  emoji: '🪣'),
             ],
           ),
         ),
-
-        // Setups list
         Expanded(
           child: setups.isEmpty
               ? _EmptySetups()
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(
-                      16, 12, 16, 100),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                   itemCount: setups.length,
                   itemBuilder: (_, i) =>
-                      _SetupCard(
-                    setup: setups[i],
-                    provider: provider,
-                  ),
+                      _SetupCard(setup: setups[i], provider: provider),
                 ),
         ),
       ],
     );
-  }
-
-  String _formatLitres(double litres) {
-    if (litres >= 1000000) {
-      return '${(litres / 1000000).toStringAsFixed(1)} ML';
-    }
-    if (litres >= 1000) {
-      return '${(litres / 1000).toStringAsFixed(1)} kL';
-    }
-    return '${litres.toStringAsFixed(0)} L';
   }
 }
 
 class _SetupCard extends StatelessWidget {
   final IrrigationSetup setup;
   final IrrigationProvider provider;
-  const _SetupCard(
-      {required this.setup, required this.provider});
+  const _SetupCard({required this.setup, required this.provider});
 
   @override
   Widget build(BuildContext context) {
-    final lastLog =
-        provider.lastLogForSetup(setup.id);
-    final daysSince =
-        provider.daysSinceIrrigation(setup.id);
-
+    final daysSince = provider.daysSinceIrrigation(setup.id);
     Color statusColor = AppColors.textHint;
     String statusText = 'No irrigation logged';
     if (daysSince != null) {
@@ -189,12 +943,10 @@ class _SetupCard extends StatelessWidget {
         statusText = '$daysSince day${daysSince == 1 ? '' : 's'} ago';
       } else if (daysSince <= 5) {
         statusColor = AppColors.warning;
-        statusText =
-            '⚠️ $daysSince days ago — check if due';
+        statusText = '⚠️ $daysSince days ago — check if due';
       } else {
         statusColor = AppColors.error;
-        statusText =
-            '🔴 $daysSince days ago — likely overdue';
+        statusText = '🔴 $daysSince days ago — likely overdue';
       }
     }
 
@@ -205,35 +957,25 @@ class _SetupCard extends StatelessWidget {
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Delete Setup?'),
-          content: Text(
-              'Remove "${setup.plotName}"? '
-              'All irrigation logs for this plot will also be deleted.'),
+          content: Text('Remove "${setup.plotName}"? All irrigation logs will also be deleted.'),
           actions: [
-            TextButton(
-                onPressed: () =>
-                    Navigator.pop(context, false),
+            TextButton(onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel')),
-            TextButton(
-                onPressed: () =>
-                    Navigator.pop(context, true),
+            TextButton(onPressed: () => Navigator.pop(context, true),
                 child: const Text('Delete',
-                    style: TextStyle(
-                        color: AppColors.error))),
+                    style: TextStyle(color: AppColors.error))),
           ],
         ),
       ),
-      onDismissed: (_) =>
-          provider.deleteSetup(setup.id),
+      onDismissed: (_) => provider.deleteSetup(setup.id),
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: AppColors.error,
-          borderRadius: BorderRadius.circular(14),
-        ),
+            color: AppColors.error,
+            borderRadius: BorderRadius.circular(14)),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_outline,
-            color: Colors.white),
+        child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -241,161 +983,104 @@ class _SetupCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border(
-            left: BorderSide(color: _iBlue, width: 4),
-            top: const BorderSide(
-                color: AppColors.divider),
-            right: const BorderSide(
-                color: AppColors.divider),
-            bottom: const BorderSide(
-                color: AppColors.divider),
+            left: const BorderSide(color: _iBlue, width: 4),
+            top: const BorderSide(color: AppColors.divider),
+            right: const BorderSide(color: AppColors.divider),
+            bottom: const BorderSide(color: AppColors.divider),
           ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header row
               Row(
                 children: [
                   Text(setup.systemEmoji,
-                      style: const TextStyle(
-                          fontSize: 28)),
+                      style: const TextStyle(fontSize: 28)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(setup.plotName,
                             style: AppTextStyles.body
-                                .copyWith(
-                                    fontWeight:
-                                        FontWeight
-                                            .w700)),
+                                .copyWith(fontWeight: FontWeight.w700)),
                         Text(setup.systemLabel,
-                            style: AppTextStyles
-                                .caption
-                                .copyWith(
-                                    color: _iBlue)),
+                            style: AppTextStyles.caption
+                                .copyWith(color: _iBlue)),
                       ],
                     ),
                   ),
-                  // Area badge
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: _iBlue.withOpacity(0.1),
-                      borderRadius:
-                          BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      '${setup.areaHa.toStringAsFixed(2)} ha',
-                      style: AppTextStyles.caption
-                          .copyWith(
-                        color: _iBlue,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: Text('${setup.areaHa.toStringAsFixed(2)} ha',
+                        style: AppTextStyles.caption.copyWith(
+                            color: _iBlue, fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
-
-              // Crop + stage
               if (setup.currentCrop != null)
                 Row(
                   children: [
-                    const Icon(Icons.eco,
-                        size: 14,
+                    const Icon(Icons.eco, size: 14,
                         color: AppColors.primaryLight),
                     const SizedBox(width: 4),
                     Text(setup.currentCrop!,
-                        style: AppTextStyles.caption
-                            .copyWith(
-                                color: AppColors
-                                    .primaryLight,
-                                fontWeight:
-                                    FontWeight.w700)),
+                        style: AppTextStyles.caption.copyWith(
+                            color: AppColors.primaryLight,
+                            fontWeight: FontWeight.w700)),
                     if (setup.growthStage != null) ...[
                       const Text(' — ',
-                          style: TextStyle(
-                              color:
-                                  AppColors.textHint)),
+                          style: TextStyle(color: AppColors.textHint)),
                       Expanded(
-                        child: Text(
-                          setup.growthStage!,
-                          style: AppTextStyles.caption
-                              .copyWith(
-                                  color: AppColors
-                                      .textSecondary),
-                          overflow:
-                              TextOverflow.ellipsis,
-                        ),
+                        child: Text(setup.growthStage!,
+                            style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textSecondary),
+                            overflow: TextOverflow.ellipsis),
                       ),
                     ],
                   ],
                 ),
-
-              // Water source
               if (setup.waterSource != null)
                 Row(
                   children: [
-                    const Icon(Icons.water_drop,
-                        size: 13, color: _iBlue),
+                    const Icon(Icons.water_drop, size: 13, color: _iBlue),
                     const SizedBox(width: 4),
                     Text(setup.waterSource!,
-                        style: AppTextStyles.caption
-                            .copyWith(
-                                color: AppColors
-                                    .textSecondary)),
+                        style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary)),
                     if (setup.flowRateLph != null) ...[
                       const Text(' • ',
-                          style: TextStyle(
-                              color:
-                                  AppColors.textHint)),
-                      Text(
-                        '${setup.flowRateLph!.toStringAsFixed(0)} L/hr',
-                        style: AppTextStyles.caption
-                            .copyWith(
-                                color: AppColors
-                                    .textHint),
-                      ),
+                          style: TextStyle(color: AppColors.textHint)),
+                      Text('${setup.flowRateLph!.toStringAsFixed(0)} L/hr',
+                          style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textHint)),
                     ],
                   ],
                 ),
-
               const SizedBox(height: 8),
               Text(statusText,
-                  style: AppTextStyles.caption
-                      .copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.w700)),
-
+                  style: AppTextStyles.caption.copyWith(
+                      color: statusColor, fontWeight: FontWeight.w700)),
               const SizedBox(height: 10),
-
-              // Action buttons
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () =>
-                          _showLogSheet(context, setup),
-                      icon: const Icon(
-                          Icons.water_drop,
-                          size: 15,
-                          color: _iBlue),
+                      onPressed: () => _showLogSheet(context, setup),
+                      icon: const Icon(Icons.water_drop, size: 15, color: _iBlue),
                       label: const Text('Log Irrigation',
                           style: TextStyle(color: _iBlue)),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: _iBlue),
-                        padding:
-                            const EdgeInsets.symmetric(
-                                vertical: 7),
+                        side: const BorderSide(color: _iBlue),
+                        padding: const EdgeInsets.symmetric(vertical: 7),
                       ),
                     ),
                   ),
@@ -403,23 +1088,14 @@ class _SetupCard extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () =>
-                          _showUpdateCropSheet(
-                              context, setup, provider),
-                      icon: const Icon(Icons.eco,
-                          size: 15,
-                          color:
-                              AppColors.primaryLight),
-                      label: const Text(
-                          'Update Crop',
-                          style: TextStyle(
-                              color: AppColors
-                                  .primaryLight)),
+                          _showUpdateCropSheet(context, setup, provider),
+                      icon: const Icon(Icons.eco, size: 15,
+                          color: AppColors.primaryLight),
+                      label: const Text('Update Crop',
+                          style: TextStyle(color: AppColors.primaryLight)),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: AppColors.primaryLight),
-                        padding:
-                            const EdgeInsets.symmetric(
-                                vertical: 7),
+                        side: const BorderSide(color: AppColors.primaryLight),
+                        padding: const EdgeInsets.symmetric(vertical: 7),
                       ),
                     ),
                   ),
@@ -432,14 +1108,12 @@ class _SetupCard extends StatelessWidget {
     );
   }
 
-  void _showLogSheet(
-      BuildContext context, IrrigationSetup setup) {
+  void _showLogSheet(BuildContext context, IrrigationSetup setup) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) =>
-          _LogIrrigationSheet(setup: setup),
+      builder: (_) => _LogIrrigationSheet(setup: setup),
     );
   }
 
@@ -449,26 +1123,19 @@ class _SetupCard extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _UpdateCropSheet(
-          setup: setup, provider: prov),
+      builder: (_) => _UpdateCropSheet(setup: setup, provider: prov),
     );
   }
 }
-
-// =============================================================================
-// TAB 2 — CALCULATOR
-// =============================================================================
 
 class _CalculatorTab extends StatefulWidget {
   const _CalculatorTab();
 
   @override
-  State<_CalculatorTab> createState() =>
-      _CalculatorTabState();
+  State<_CalculatorTab> createState() => _CalculatorTabState();
 }
 
-class _CalculatorTabState
-    extends State<_CalculatorTab> {
+class _CalculatorTabState extends State<_CalculatorTab> {
   String _crop = 'Maize';
   String _stage = '';
   String _system = 'drip';
@@ -481,11 +1148,8 @@ class _CalculatorTabState
   @override
   void initState() {
     super.initState();
-    _stage =
-        IrrigationService.cropStages[_crop]!.first;
-    final eto =
-        IrrigationService.estimateEto(DateTime.now());
-    _etoCtrl.text = eto.toStringAsFixed(1);
+    _stage = IrrigationService.cropStages[_crop]!.first;
+    _etoCtrl.text = IrrigationService.estimateEto(DateTime.now()).toStringAsFixed(1);
   }
 
   @override
@@ -500,251 +1164,143 @@ class _CalculatorTabState
   void _calculate() {
     final area = double.tryParse(_areaCtrl.text);
     final eto = double.tryParse(_etoCtrl.text);
-    final rain =
-        double.tryParse(_rainCtrl.text) ?? 0.0;
+    final rain = double.tryParse(_rainCtrl.text) ?? 0.0;
     final flow = double.tryParse(_flowCtrl.text);
-
     if (area == null || eto == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Please fill in area and ETo.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please fill in area and ETo.'),
+          behavior: SnackBarBehavior.floating));
       return;
     }
-
     setState(() {
       _result = IrrigationService.calculateRequirement(
-        crop: _crop,
-        stage: _stage,
-        areaHa: area,
-        systemType: _system,
-        etoMmDay: eto,
-        rainfallMmDay: rain,
-        flowRateLph: flow,
+        crop: _crop, stage: _stage, areaHa: area,
+        systemType: _system, etoMmDay: eto,
+        rainfallMmDay: rain, flowRateLph: flow,
       );
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final stages =
-        IrrigationService.cropStages[_crop] ?? [];
-
+    final stages = IrrigationService.cropStages[_crop] ?? [];
     return SingleChildScrollView(
-      padding:
-          const EdgeInsets.fromLTRB(16, 16, 16, 80),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [_iBlueDark, _iBlue]),
+              gradient: const LinearGradient(colors: [_iBlueDark, _iBlue]),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('💧 Water Requirement',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700)),
+                const Text('💧 Water Requirement', style: TextStyle(
+                    color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                Text(
-                  'Based on FAO-56 Penman-Monteith Kc × ETo method.',
-                  style: AppTextStyles.caption
-                      .copyWith(color: Colors.white70),
-                ),
+                Text('Based on FAO-56 Penman-Monteith Kc × ETo method.',
+                    style: AppTextStyles.caption.copyWith(color: Colors.white70)),
               ],
             ),
           ),
           const SizedBox(height: 16),
-
-          // Crop
           _Label('Crop'),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: _crop,
-            decoration: _dropDec(),
-            items: IrrigationService.crops
-                .map((c) => DropdownMenuItem(
-                    value: c,
-                    child: Text(c,
-                        style: AppTextStyles.body)))
-                .toList(),
+            value: _crop, decoration: _dropDec(),
+            items: IrrigationService.crops.map((c) => DropdownMenuItem(
+                value: c, child: Text(c, style: AppTextStyles.body))).toList(),
             onChanged: (v) => setState(() {
               _crop = v!;
-              _stage = IrrigationService
-                  .cropStages[_crop]!.first;
+              _stage = IrrigationService.cropStages[_crop]!.first;
             }),
           ),
           const SizedBox(height: 12),
-
-          // Growth stage
           _Label('Growth Stage'),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: stages.contains(_stage)
-                ? _stage
-                : stages.first,
-            decoration: _dropDec(),
-            isExpanded: true,
-            items: stages
-                .map((s) => DropdownMenuItem(
-                    value: s,
-                    child: Text(s,
-                        style: AppTextStyles.bodySmall,
-                        overflow:
-                            TextOverflow.ellipsis)))
-                .toList(),
-            onChanged: (v) =>
-                setState(() => _stage = v!),
+            value: stages.contains(_stage) ? _stage : stages.first,
+            decoration: _dropDec(), isExpanded: true,
+            items: stages.map((s) => DropdownMenuItem(
+                value: s, child: Text(s, style: AppTextStyles.bodySmall,
+                overflow: TextOverflow.ellipsis))).toList(),
+            onChanged: (v) => setState(() => _stage = v!),
           ),
           const SizedBox(height: 12),
-
-          // Irrigation system
           _Label('Irrigation System'),
           const SizedBox(height: 6),
           Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: IrrigationService.systemTypes
-                .map((s) {
-              final dummy = IrrigationSetup(
-                id: '',
-                userId: '',
-                plotName: '',
-                areaHa: 1,
-                systemType: s,
-                createdAt: DateTime.now(),
-              );
+            spacing: 8, runSpacing: 6,
+            children: IrrigationService.systemTypes.map((s) {
+              final dummy = IrrigationSetup(id: '', userId: '', plotName: '',
+                  areaHa: 1, systemType: s, createdAt: DateTime.now());
               final selected = _system == s;
               return GestureDetector(
-                onTap: () =>
-                    setState(() => _system = s),
+                onTap: () => setState(() => _system = s),
                 child: AnimatedContainer(
-                  duration: const Duration(
-                      milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: selected
-                        ? _iBlue
-                        : Colors.white,
-                    borderRadius:
-                        BorderRadius.circular(20),
-                    border: Border.all(
-                      color: selected
-                          ? _iBlue
-                          : AppColors.divider,
-                    ),
+                    color: selected ? _iBlue : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: selected ? _iBlue : AppColors.divider),
                   ),
-                  child: Text(
-                    '${dummy.systemEmoji} ${dummy.systemLabel}',
-                    style: AppTextStyles.caption
-                        .copyWith(
-                      color: selected
-                          ? Colors.white
-                          : AppColors.textPrimary,
-                      fontWeight: selected
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                    ),
-                  ),
+                  child: Text('${dummy.systemEmoji} ${dummy.systemLabel}',
+                      style: AppTextStyles.caption.copyWith(
+                        color: selected ? Colors.white : AppColors.textPrimary,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                      )),
                 ),
               );
             }).toList(),
           ),
           const SizedBox(height: 12),
-
-          // Inputs row
           Row(
             children: [
-              Expanded(
-                child: _InputField(
-                  ctrl: _areaCtrl,
-                  label: 'Area (ha)',
-                  hint: '1.0',
-                ),
-              ),
+              Expanded(child: _InputField(ctrl: _areaCtrl, label: 'Area (ha)', hint: '1.0')),
               const SizedBox(width: 10),
-              Expanded(
-                child: _InputField(
-                  ctrl: _etoCtrl,
-                  label: 'ETo (mm/day)',
-                  hint: '5.5',
-                ),
-              ),
+              Expanded(child: _InputField(ctrl: _etoCtrl, label: 'ETo (mm/day)', hint: '5.5')),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: _InputField(
-                  ctrl: _rainCtrl,
-                  label: 'Rainfall (mm/day)',
-                  hint: '0',
-                ),
-              ),
+              Expanded(child: _InputField(ctrl: _rainCtrl, label: 'Rainfall (mm/day)', hint: '0')),
               const SizedBox(width: 10),
-              Expanded(
-                child: _InputField(
-                  ctrl: _flowCtrl,
-                  label: 'Flow rate (L/hr) opt.',
-                  hint: 'e.g. 5000',
-                ),
-              ),
+              Expanded(child: _InputField(ctrl: _flowCtrl, label: 'Flow rate (L/hr) opt.', hint: 'e.g. 5000')),
             ],
           ),
-
-          // ETo hint
           Padding(
-            padding:
-                const EdgeInsets.only(top: 6, left: 2),
+            padding: const EdgeInsets.only(top: 6, left: 2),
             child: Text(
               '💡 ETo estimate for this month: '
               '${IrrigationService.estimateEto(DateTime.now()).toStringAsFixed(1)} mm/day',
               style: AppTextStyles.caption.copyWith(
-                  color: _iBlue,
-                  fontWeight: FontWeight.w600),
+                  color: _iBlue, fontWeight: FontWeight.w600),
             ),
           ),
-
           const SizedBox(height: 14),
           SizedBox(
-            width: double.infinity,
-            height: 48,
+            width: double.infinity, height: 48,
             child: ElevatedButton.icon(
               onPressed: _calculate,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _iBlue,
-                foregroundColor: Colors.white,
+                backgroundColor: _iBlue, foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12)),
               ),
               icon: const Icon(Icons.calculate),
-              label: const Text(
-                  'Calculate Water Requirement',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700)),
+              label: const Text('Calculate Water Requirement',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
             ),
           ),
-
-          // Result
           if (_result != null) ...[
             const SizedBox(height: 16),
             _WaterResultCard(result: _result!),
           ],
-
           const SizedBox(height: 30),
         ],
       ),
@@ -752,21 +1308,14 @@ class _CalculatorTabState
   }
 
   InputDecoration _dropDec() => InputDecoration(
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: AppColors.divider),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12, vertical: 10),
-      );
+    filled: true, fillColor: Colors.white,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: AppColors.divider),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  );
 }
-
-// =============================================================================
-// TAB 3 — SCHEDULE
-// =============================================================================
 
 class _ScheduleTab extends StatelessWidget {
   final IrrigationProvider provider;
@@ -774,63 +1323,38 @@ class _ScheduleTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final eto =
-        IrrigationService.estimateEto(DateTime.now());
+    final eto = IrrigationService.estimateEto(DateTime.now());
     final allEntries = <IrrigationScheduleEntry>[];
 
     for (final setup in provider.activeSetups) {
       if (setup.currentCrop == null) continue;
-      final lastLog =
-          provider.lastLogForSetup(setup.id);
+      final lastLog = provider.lastLogForSetup(setup.id);
       final lastDate = lastLog?.irrigatedAt ??
-          DateTime.now()
-              .subtract(const Duration(days: 3));
-
-      final entries =
-          IrrigationService.generateSchedule(
-        setup: setup,
-        lastIrrigated: lastDate,
-        etoMmDay: eto,
-      );
+          DateTime.now().subtract(const Duration(days: 3));
+      final entries = IrrigationService.generateSchedule(
+        setup: setup, lastIrrigated: lastDate, etoMmDay: eto);
       allEntries.addAll(entries);
     }
+    allEntries.sort((a, b) => a.date.compareTo(b.date));
 
-    allEntries.sort(
-        (a, b) => a.date.compareTo(b.date));
+    final overdue = allEntries.where((e) => e.isDue).toList();
+    final upcoming = allEntries.where((e) => e.isUpcoming).toList();
 
-    final overdue =
-        allEntries.where((e) => e.isDue).toList();
-    final upcoming = allEntries
-        .where((e) => e.isUpcoming)
-        .toList();
-
-    if (provider.activeSetups.isEmpty) {
-      return _EmptySchedule();
-    }
-
-    if (provider.activeSetups
-        .every((s) => s.currentCrop == null)) {
+    if (provider.activeSetups.isEmpty) return _EmptySchedule();
+    if (provider.activeSetups.every((s) => s.currentCrop == null)) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
-            mainAxisAlignment:
-                MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('🌱',
-                  style: TextStyle(fontSize: 48)),
+              const Text('🌱', style: TextStyle(fontSize: 48)),
               const SizedBox(height: 12),
-              Text(
-                'No crops assigned',
-                style: AppTextStyles.heading3.copyWith(
-                    color: AppColors.textSecondary),
-              ),
+              Text('No crops assigned', style: AppTextStyles.heading3
+                  .copyWith(color: AppColors.textSecondary)),
               const SizedBox(height: 8),
-              Text(
-                'Tap "Update Crop" on each plot\nto assign a crop and generate a schedule.',
-                style: AppTextStyles.bodySmall,
-                textAlign: TextAlign.center,
-              ),
+              Text('Tap "Update Crop" on each plot to assign a crop.',
+                  style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
             ],
           ),
         ),
@@ -838,50 +1362,39 @@ class _ScheduleTab extends StatelessWidget {
     }
 
     return ListView(
-      padding:
-          const EdgeInsets.fromLTRB(16, 12, 16, 80),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
       children: [
-        // ETo info
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: _iBlue.withOpacity(0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: _iBlue.withOpacity(0.2)),
+            border: Border.all(color: _iBlue.withOpacity(0.2)),
           ),
           child: Row(
             children: [
-              const Text('🌡️',
-                  style: TextStyle(fontSize: 18)),
+              const Text('🌡️', style: TextStyle(fontSize: 18)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'ETo estimate this month: ${eto.toStringAsFixed(1)} mm/day. '
-                  'Schedule updates automatically based on crop stage and weather.',
-                  style: AppTextStyles.caption
-                      .copyWith(color: _iBlue),
+                  'ETo estimate this month: ${eto.toStringAsFixed(1)} mm/day.',
+                  style: AppTextStyles.caption.copyWith(color: _iBlue),
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 14),
-
         if (overdue.isNotEmpty) ...[
-          _SectionLabel('🔴 Due / Overdue',
-              AppColors.error),
+          _SectionLabel('🔴 Due / Overdue', AppColors.error),
           const SizedBox(height: 8),
-          ...overdue.map(
-              (e) => _ScheduleCard(entry: e)),
+          ...overdue.map((e) => _ScheduleCard(entry: e)),
           const SizedBox(height: 14),
         ],
-
         if (upcoming.isNotEmpty) ...[
           _SectionLabel('📅 Upcoming', _iBlue),
           const SizedBox(height: 8),
-          ...upcoming.map(
-              (e) => _ScheduleCard(entry: e)),
+          ...upcoming.map((e) => _ScheduleCard(entry: e)),
         ],
       ],
     );
@@ -894,19 +1407,14 @@ class _ScheduleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const months = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    const days = [
-      '', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
-    ];
+    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     final dateStr = entry.isDue
         ? (DateTime.now().difference(entry.date).inDays == 0
             ? 'Today'
             : 'Overdue — ${entry.date.day} ${months[entry.date.month]}')
-        : '${days[entry.date.weekday]} ${entry.date.day} ${months[entry.date.month]}';
+        : '${entry.date.day} ${months[entry.date.month]}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -922,10 +1430,8 @@ class _ScheduleCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Date bubble
           Container(
-            width: 50,
-            height: 50,
+            width: 50, height: 50,
             decoration: BoxDecoration(
               color: entry.isDue
                   ? AppColors.error.withOpacity(0.1)
@@ -933,69 +1439,35 @@ class _ScheduleCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Column(
-              mainAxisAlignment:
-                  MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  '${entry.date.day}',
-                  style: TextStyle(
-                    color:
-                        entry.isDue ? AppColors.error : _iBlue,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                  ),
-                ),
-                Text(
-                  months[entry.date.month],
-                  style: TextStyle(
-                    color:
-                        entry.isDue ? AppColors.error : _iBlue,
-                    fontSize: 11,
-                  ),
-                ),
+                Text('${entry.date.day}', style: TextStyle(
+                    color: entry.isDue ? AppColors.error : _iBlue,
+                    fontWeight: FontWeight.w700, fontSize: 18)),
+                Text(months[entry.date.month], style: TextStyle(
+                    color: entry.isDue ? AppColors.error : _iBlue,
+                    fontSize: 11)),
               ],
             ),
           ),
           const SizedBox(width: 12),
-
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(entry.plotName,
-                    style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w700)),
-                Text(dateStr,
-                    style: AppTextStyles.caption
-                        .copyWith(
-                      color: entry.isDue
-                          ? AppColors.error
-                          : _iBlue,
-                      fontWeight: FontWeight.w600,
-                    )),
+                Text(entry.plotName, style: AppTextStyles.body
+                    .copyWith(fontWeight: FontWeight.w700)),
+                Text(dateStr, style: AppTextStyles.caption.copyWith(
+                    color: entry.isDue ? AppColors.error : _iBlue,
+                    fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    _MiniStat(
-                      label: 'Apply',
-                      value:
-                          '${entry.waterMm.toStringAsFixed(1)} mm',
-                    ),
+                    _MiniStat(label: 'Apply',
+                        value: '${entry.waterMm.toStringAsFixed(1)} mm'),
                     const SizedBox(width: 12),
-                    _MiniStat(
-                      label: 'Volume',
-                      value:
-                          '${(entry.waterLitres / 1000).toStringAsFixed(1)} kL',
-                    ),
-                    if (entry.durationMinutes > 0) ...[
-                      const SizedBox(width: 12),
-                      _MiniStat(
-                        label: 'Run for',
-                        value:
-                            '${entry.durationMinutes.toStringAsFixed(0)} min',
-                      ),
-                    ],
+                    _MiniStat(label: 'Volume',
+                        value: '${(entry.waterLitres / 1000).toStringAsFixed(1)} kL'),
                   ],
                 ),
               ],
@@ -1007,10 +1479,6 @@ class _ScheduleCard extends StatelessWidget {
   }
 }
 
-// =============================================================================
-// TAB 4 — HISTORY
-// =============================================================================
-
 class _HistoryTab extends StatelessWidget {
   final IrrigationProvider provider;
   const _HistoryTab({required this.provider});
@@ -1018,107 +1486,73 @@ class _HistoryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final logs = provider.logs;
-
     if (logs.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
-            mainAxisAlignment:
-                MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('📋',
-                  style: TextStyle(fontSize: 48)),
+              const Text('📋', style: TextStyle(fontSize: 48)),
               const SizedBox(height: 12),
               Text('No irrigation logged yet',
-                  style: AppTextStyles.heading3.copyWith(
-                      color: AppColors.textSecondary)),
+                  style: AppTextStyles.heading3
+                      .copyWith(color: AppColors.textSecondary)),
               const SizedBox(height: 8),
-              Text(
-                'Tap "Log Irrigation" on any plot\nto start tracking water use.',
-                style: AppTextStyles.bodySmall,
-                textAlign: TextAlign.center,
-              ),
+              Text('Tap "Log Irrigation" on any plot to start tracking.',
+                  style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
             ],
           ),
         ),
       );
     }
-
     return ListView(
-      padding:
-          const EdgeInsets.fromLTRB(16, 12, 16, 80),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
       children: [
-        // Tips section
         ExpansionTile(
-          leading: const Text('💡',
-              style: TextStyle(fontSize: 20)),
+          leading: const Text('💡', style: TextStyle(fontSize: 20)),
           title: Text('Irrigation Tips',
-              style: AppTextStyles.body
-                  .copyWith(fontWeight: FontWeight.w700)),
-          children: IrrigationService.irrigationTips
-              .map((t) => Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        16, 0, 16, 10),
-                    child: Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        Text(t['emoji']!,
-                            style: const TextStyle(
-                                fontSize: 18)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment
-                                    .start,
-                            children: [
-                              Text(t['title']!,
-                                  style: AppTextStyles
-                                      .caption
-                                      .copyWith(
-                                          fontWeight:
-                                              FontWeight
-                                                  .w700)),
-                              Text(t['detail']!,
-                                  style: AppTextStyles
-                                      .caption),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ))
-              .toList(),
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700)),
+          children: IrrigationService.irrigationTips.map((t) => Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t['emoji']!, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(t['title']!, style: AppTextStyles.caption
+                          .copyWith(fontWeight: FontWeight.w700)),
+                      Text(t['detail']!, style: AppTextStyles.caption),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )).toList(),
         ),
         const Divider(),
         const SizedBox(height: 8),
-
-        Text('Recent Irrigations',
-            style: AppTextStyles.label.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textSecondary)),
+        Text('Recent Irrigations', style: AppTextStyles.label
+            .copyWith(fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
         const SizedBox(height: 8),
-
         ...logs.map((log) => Dismissible(
-              key: Key(log.id),
-              direction: DismissDirection.endToStart,
-              background: Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.error,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20),
-                child: const Icon(Icons.delete_outline,
-                    color: Colors.white),
-              ),
-              onDismissed: (_) =>
-                  provider.deleteLog(log.id),
-              child: _LogCard(log: log),
-            )),
+          key: Key(log.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+                color: AppColors.error, borderRadius: BorderRadius.circular(12)),
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            child: const Icon(Icons.delete_outline, color: Colors.white),
+          ),
+          onDismissed: (_) => provider.deleteLog(log.id),
+          child: _LogCard(log: log),
+        )),
       ],
     );
   }
@@ -1141,40 +1575,26 @@ class _LogCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 40, height: 40,
             decoration: BoxDecoration(
-              color: _iBlue.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.water_drop,
-                color: _iBlue, size: 20),
+                color: _iBlue.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(Icons.water_drop, color: _iBlue, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(log.plotName,
-                    style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w700)),
+                Text(log.plotName, style: AppTextStyles.body
+                    .copyWith(fontWeight: FontWeight.w700)),
                 Row(
                   children: [
-                    Text(log.daysAgo,
+                    Text(log.daysAgo, style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textHint)),
+                    const Text(' • ', style: TextStyle(color: AppColors.textHint)),
+                    Text('${log.durationMinutes.toStringAsFixed(0)} min',
                         style: AppTextStyles.caption
-                            .copyWith(
-                                color:
-                                    AppColors.textHint)),
-                    const Text(' • ',
-                        style: TextStyle(
-                            color: AppColors.textHint)),
-                    Text(
-                        '${log.durationMinutes.toStringAsFixed(0)} min',
-                        style: AppTextStyles.caption
-                            .copyWith(
-                                color: AppColors
-                                    .textSecondary)),
+                            .copyWith(color: AppColors.textSecondary)),
                   ],
                 ),
               ],
@@ -1183,18 +1603,11 @@ class _LogCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                '${(log.waterAppliedLitres / 1000).toStringAsFixed(1)} kL',
-                style: AppTextStyles.body.copyWith(
-                  color: _iBlue,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                '${log.waterAppliedMm.toStringAsFixed(1)} mm',
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.textHint),
-              ),
+              Text('${(log.waterAppliedLitres / 1000).toStringAsFixed(1)} kL',
+                  style: AppTextStyles.body.copyWith(
+                      color: _iBlue, fontWeight: FontWeight.w700)),
+              Text('${log.waterAppliedMm.toStringAsFixed(1)} mm',
+                  style: AppTextStyles.caption.copyWith(color: AppColors.textHint)),
             ],
           ),
         ],
@@ -1202,10 +1615,6 @@ class _LogCard extends StatelessWidget {
     );
   }
 }
-
-// =============================================================================
-// RESULT CARD
-// =============================================================================
 
 class _WaterResultCard extends StatelessWidget {
   final WaterRequirement result;
@@ -1213,86 +1622,56 @@ class _WaterResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dummy = IrrigationSetup(
-      id: '',
-      userId: '',
-      plotName: '',
-      areaHa: result.areaHa,
-      systemType: result.systemType,
-      createdAt: DateTime.now(),
-    );
-
+    final dummy = IrrigationSetup(id: '', userId: '', plotName: '',
+        areaHa: result.areaHa, systemType: result.systemType,
+        createdAt: DateTime.now());
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _iBlue.withOpacity(0.06),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-            color: _iBlue.withOpacity(0.25)),
+        border: Border.all(color: _iBlue.withOpacity(0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text('💧',
-                  style: TextStyle(fontSize: 20)),
+              const Text('💧', style: TextStyle(fontSize: 20)),
               const SizedBox(width: 8),
               Text('Water Requirement — ${result.crop}',
                   style: AppTextStyles.body.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: _iBlue)),
+                      fontWeight: FontWeight.w700, color: _iBlue)),
             ],
           ),
           const SizedBox(height: 12),
-
-          // Key numbers
           Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: 12, runSpacing: 12,
             children: [
-              _ResultStat(
-                label: 'Daily ETc',
-                value:
-                    '${result.etcMmPerDay.toStringAsFixed(1)} mm/day',
-              ),
-              _ResultStat(
-                label: 'Irrigation interval',
-                value:
-                    '${result.suggestedIntervalDays} day${result.suggestedIntervalDays == 1 ? '' : 's'}',
-                highlight: true,
-              ),
-              _ResultStat(
-                label: 'Per event (mm)',
-                value:
-                    '${result.waterPerIrrigationMm.toStringAsFixed(1)} mm',
-              ),
-              _ResultStat(
-                label: 'Per event (volume)',
-                value:
-                    '${(result.waterPerIrrigationLitres / 1000).toStringAsFixed(1)} kL',
-                highlight: true,
-              ),
-              _ResultStat(
-                label: 'System efficiency',
-                value:
-                    '${(result.efficiency * 100).toStringAsFixed(0)}% (${dummy.systemLabel})',
-              ),
+              _ResultStat(label: 'Daily ETc',
+                  value: '${result.etcMmPerDay.toStringAsFixed(1)} mm/day'),
+              _ResultStat(label: 'Irrigation interval',
+                  value: '${result.suggestedIntervalDays} day${result.suggestedIntervalDays == 1 ? '' : 's'}',
+                  highlight: true),
+              _ResultStat(label: 'Per event (mm)',
+                  value: '${result.waterPerIrrigationMm.toStringAsFixed(1)} mm'),
+              _ResultStat(label: 'Per event (volume)',
+                  value: '${(result.waterPerIrrigationLitres / 1000).toStringAsFixed(1)} kL',
+                  highlight: true),
+              _ResultStat(label: 'System efficiency',
+                  value: '${(result.efficiency * 100).toStringAsFixed(0)}% (${dummy.systemLabel})'),
             ],
           ),
-
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                  color: _iBlue.withOpacity(0.2)),
+              border: Border.all(color: _iBlue.withOpacity(0.2)),
             ),
             child: Text(result.recommendation,
-                style: AppTextStyles.bodySmall
-                    .copyWith(height: 1.6)),
+                style: AppTextStyles.bodySmall.copyWith(height: 1.6)),
           ),
         ],
       ),
@@ -1301,7 +1680,7 @@ class _WaterResultCard extends StatelessWidget {
 }
 
 // =============================================================================
-// BOTTOM SHEETS
+// BOTTOM SHEETS — unchanged
 // =============================================================================
 
 class _LogIrrigationSheet extends StatefulWidget {
@@ -1309,12 +1688,10 @@ class _LogIrrigationSheet extends StatefulWidget {
   const _LogIrrigationSheet({required this.setup});
 
   @override
-  State<_LogIrrigationSheet> createState() =>
-      _LogIrrigationSheetState();
+  State<_LogIrrigationSheet> createState() => _LogIrrigationSheetState();
 }
 
-class _LogIrrigationSheetState
-    extends State<_LogIrrigationSheet> {
+class _LogIrrigationSheetState extends State<_LogIrrigationSheet> {
   final _durationCtrl = TextEditingController();
   final _flowCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
@@ -1326,8 +1703,7 @@ class _LogIrrigationSheetState
   void initState() {
     super.initState();
     if (widget.setup.flowRateLph != null) {
-      _flowCtrl.text =
-          widget.setup.flowRateLph!.toStringAsFixed(0);
+      _flowCtrl.text = widget.setup.flowRateLph!.toStringAsFixed(0);
     }
   }
 
@@ -1340,215 +1716,127 @@ class _LogIrrigationSheetState
   }
 
   Future<void> _save() async {
-    final duration =
-        double.tryParse(_durationCtrl.text);
+    final duration = double.tryParse(_durationCtrl.text);
     final flow = double.tryParse(_flowCtrl.text);
-
     if (duration == null || duration <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Enter valid irrigation duration.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Enter valid irrigation duration.'),
+          behavior: SnackBarBehavior.floating));
       return;
     }
     if (flow == null || flow <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Enter your system flow rate.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+          behavior: SnackBarBehavior.floating));
       return;
     }
-
     setState(() => _isSaving = true);
     final user = context.read<AuthProvider>().user;
     if (user == null) return;
-
-    await context
-        .read<IrrigationProvider>()
-        .logIrrigation(
-          userId: user.userId,
-          setupId: widget.setup.id,
-          plotName: widget.setup.plotName,
-          areaHa: widget.setup.areaHa,
-          irrigatedAt: _date,
-          durationMinutes: duration,
-          flowRateLph: flow,
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
-          weatherCondition: _weather,
-        );
-
+    await context.read<IrrigationProvider>().logIrrigation(
+      userId: user.userId, setupId: widget.setup.id,
+      plotName: widget.setup.plotName, areaHa: widget.setup.areaHa,
+      irrigatedAt: _date, durationMinutes: duration, flowRateLph: flow,
+      notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      weatherCondition: _weather,
+    );
     if (!mounted) return;
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Irrigation logged!'),
-        backgroundColor: _iBlue,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+        backgroundColor: _iBlue, behavior: SnackBarBehavior.floating));
   }
 
   @override
   Widget build(BuildContext context) {
-    const months = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-
-    // Auto-calculate water applied preview
-    final duration =
-        double.tryParse(_durationCtrl.text) ?? 0;
-    final flow =
-        double.tryParse(_flowCtrl.text) ?? 0;
+    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final duration = double.tryParse(_durationCtrl.text) ?? 0;
+    final flow = double.tryParse(_flowCtrl.text) ?? 0;
     final waterL = (duration / 60) * flow;
-    final waterMm =
-        waterL / (widget.setup.areaHa * 10000);
+    final waterMm = waterL / (widget.setup.areaHa * 10000);
 
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom:
-            MediaQuery.of(context).viewInsets.bottom +
-                20,
+        left: 20, right: 20, top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.divider,
-                  borderRadius:
-                      BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            Center(child: Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: AppColors.divider,
+                    borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 16),
-            Text(
-              '💧 Log Irrigation — ${widget.setup.plotName}',
-              style: AppTextStyles.heading3,
-            ),
+            Text('💧 Log Irrigation — ${widget.setup.plotName}',
+                style: AppTextStyles.heading3),
             const SizedBox(height: 16),
-
-            // Date
             GestureDetector(
               onTap: () async {
                 final d = await showDatePicker(
-                  context: context,
-                  initialDate: _date,
-                  firstDate: DateTime.now()
-                      .subtract(
-                          const Duration(days: 30)),
+                  context: context, initialDate: _date,
+                  firstDate: DateTime.now().subtract(const Duration(days: 30)),
                   lastDate: DateTime.now(),
                 );
-                if (d != null) {
-                  setState(() => _date = d);
-                }
+                if (d != null) setState(() => _date = d);
               },
               child: Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius:
-                      BorderRadius.circular(10),
-                  border: Border.all(
-                      color: AppColors.divider),
-                ),
+                decoration: BoxDecoration(color: AppColors.background,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.divider)),
                 child: Row(
                   children: [
-                    const Icon(Icons.calendar_today,
-                        color: _iBlue),
+                    const Icon(Icons.calendar_today, color: _iBlue),
                     const SizedBox(width: 10),
-                    Text(
-                      '${_date.day} ${months[_date.month]} ${_date.year}',
-                      style: AppTextStyles.body,
-                    ),
+                    Text('${_date.day} ${months[_date.month]} ${_date.year}',
+                        style: AppTextStyles.body),
                     const Spacer(),
-                    Text('Change',
-                        style: AppTextStyles.caption
-                            .copyWith(color: _iBlue)),
+                    Text('Change', style: AppTextStyles.caption
+                        .copyWith(color: _iBlue)),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 12),
-
             Row(
               children: [
-                Expanded(
-                  child: _InputField(
-                    ctrl: _durationCtrl,
-                    label: 'Duration (minutes) *',
-                    hint: 'e.g. 90',
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
+                Expanded(child: _InputField(ctrl: _durationCtrl,
+                    label: 'Duration (minutes) *', hint: 'e.g. 90',
+                    onChanged: (_) => setState(() {}))),
                 const SizedBox(width: 10),
-                Expanded(
-                  child: _InputField(
-                    ctrl: _flowCtrl,
-                    label: 'Flow rate (L/hr) *',
-                    hint: 'e.g. 5000',
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
+                Expanded(child: _InputField(ctrl: _flowCtrl,
+                    label: 'Flow rate (L/hr) *', hint: 'e.g. 5000',
+                    onChanged: (_) => setState(() {}))),
               ],
             ),
-
-            // Live preview
             if (waterL > 0) ...[
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _iBlue.withOpacity(0.08),
-                  borderRadius:
-                      BorderRadius.circular(8),
-                ),
+                    color: _iBlue.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8)),
                 child: Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.spaceAround,
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    Text(
-                        '${(waterL / 1000).toStringAsFixed(1)} kL applied',
-                        style: AppTextStyles.body
-                            .copyWith(
-                          color: _iBlue,
-                          fontWeight: FontWeight.w700,
-                        )),
-                    Text(
-                        '${waterMm.toStringAsFixed(1)} mm',
-                        style: AppTextStyles.body
-                            .copyWith(
-                          color: _iBlue,
-                          fontWeight: FontWeight.w700,
-                        )),
+                    Text('${(waterL / 1000).toStringAsFixed(1)} kL applied',
+                        style: AppTextStyles.body.copyWith(
+                            color: _iBlue, fontWeight: FontWeight.w700)),
+                    Text('${waterMm.toStringAsFixed(1)} mm',
+                        style: AppTextStyles.body.copyWith(
+                            color: _iBlue, fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
             ],
             const SizedBox(height: 12),
-
-            // Weather condition
             _Label('Weather condition'),
             const SizedBox(height: 6),
             Row(
@@ -1557,100 +1845,58 @@ class _LogIrrigationSheetState
                 ('🌤️ Mild', 'mild'),
                 ('🌡️ Cool', 'cool'),
                 ('🌧️ Rainy', 'rainy'),
-              ]
-                  .map((w) => Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(
-                              () => _weather = w.$2),
-                          child: AnimatedContainer(
-                            duration: const Duration(
-                                milliseconds: 150),
-                            margin:
-                                const EdgeInsets.only(
-                                    right: 4),
-                            padding:
-                                const EdgeInsets.symmetric(
-                                    vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _weather == w.$2
-                                  ? _iBlue
-                                      .withOpacity(0.12)
-                                  : Colors.white,
-                              borderRadius:
-                                  BorderRadius.circular(
-                                      8),
-                              border: Border.all(
-                                  color:
-                                      _weather == w.$2
-                                          ? _iBlue
-                                          : AppColors
-                                              .divider),
-                            ),
-                            child: Text(w.$1,
-                                textAlign:
-                                    TextAlign.center,
-                                style: AppTextStyles
-                                    .caption
-                                    .copyWith(
-                                  fontSize: 9.5,
-                                  color: _weather == w.$2
-                                      ? _iBlue
-                                      : AppColors
-                                          .textSecondary,
-                                  fontWeight:
-                                      _weather == w.$2
-                                          ? FontWeight.w700
-                                          : FontWeight
-                                              .w400,
-                                )),
-                          ),
-                        ),
-                      ))
-                  .toList(),
+              ].map((w) => Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _weather = w.$2),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    margin: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _weather == w.$2
+                          ? _iBlue.withOpacity(0.12) : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: _weather == w.$2 ? _iBlue : AppColors.divider),
+                    ),
+                    child: Text(w.$1, textAlign: TextAlign.center,
+                        style: AppTextStyles.caption.copyWith(
+                          fontSize: 9.5,
+                          color: _weather == w.$2 ? _iBlue : AppColors.textSecondary,
+                          fontWeight: _weather == w.$2
+                              ? FontWeight.w700 : FontWeight.w400,
+                        )),
+                  ),
+                ),
+              )).toList(),
             ),
             const SizedBox(height: 12),
-
             TextField(
-              controller: _notesCtrl,
-              maxLines: 2,
+              controller: _notesCtrl, maxLines: 2,
               decoration: InputDecoration(
                 labelText: 'Notes (optional)',
-                prefixIcon: const Icon(Icons.notes,
-                    color: _iBlue),
-                border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(10)),
-                filled: true,
-                fillColor: AppColors.background,
+                prefixIcon: const Icon(Icons.notes, color: _iBlue),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                filled: true, fillColor: AppColors.background,
                 alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 20),
-
             SizedBox(
-              width: double.infinity,
-              height: 50,
+              width: double.infinity, height: 50,
               child: ElevatedButton(
                 onPressed: _isSaving ? null : _save,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _iBlue,
-                  foregroundColor: Colors.white,
+                  backgroundColor: _iBlue, foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 child: _isSaving
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child:
-                            CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2))
+                    ? const SizedBox(width: 22, height: 22,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
                     : const Text('Save Irrigation Log',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16)),
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
               ),
             ),
           ],
@@ -1660,31 +1906,24 @@ class _LogIrrigationSheetState
   }
 }
 
-// ---------------------------------------------------------------------------
-
 class _UpdateCropSheet extends StatefulWidget {
   final IrrigationSetup setup;
   final IrrigationProvider provider;
-  const _UpdateCropSheet(
-      {required this.setup, required this.provider});
+  const _UpdateCropSheet({required this.setup, required this.provider});
 
   @override
-  State<_UpdateCropSheet> createState() =>
-      _UpdateCropSheetState();
+  State<_UpdateCropSheet> createState() => _UpdateCropSheetState();
 }
 
-class _UpdateCropSheetState
-    extends State<_UpdateCropSheet> {
+class _UpdateCropSheetState extends State<_UpdateCropSheet> {
   late String _crop;
   late String _stage;
 
   @override
   void initState() {
     super.initState();
-    _crop = widget.setup.currentCrop ??
-        IrrigationService.crops.first;
-    final stages =
-        IrrigationService.cropStages[_crop] ?? [];
+    _crop = widget.setup.currentCrop ?? IrrigationService.crops.first;
+    final stages = IrrigationService.cropStages[_crop] ?? [];
     _stage = widget.setup.growthStage != null &&
             stages.contains(widget.setup.growthStage)
         ? widget.setup.growthStage!
@@ -1693,125 +1932,79 @@ class _UpdateCropSheetState
 
   @override
   Widget build(BuildContext context) {
-    final stages =
-        IrrigationService.cropStages[_crop] ?? [];
-
+    final stages = IrrigationService.cropStages[_crop] ?? [];
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom:
-            MediaQuery.of(context).viewInsets.bottom +
-                24,
+        left: 20, right: 20, top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.divider,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          Center(child: Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2)))),
           const SizedBox(height: 16),
           Text('Update Crop — ${widget.setup.plotName}',
               style: AppTextStyles.heading3),
           const SizedBox(height: 16),
-
           _Label('Crop'),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
             value: _crop,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.background,
-              border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(10)),
-              contentPadding:
-                  const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
-            ),
-            items: IrrigationService.crops
-                .map((c) => DropdownMenuItem(
-                    value: c,
-                    child: Text(c,
-                        style: AppTextStyles.body)))
-                .toList(),
+            decoration: InputDecoration(filled: true,
+                fillColor: AppColors.background,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10)),
+            items: IrrigationService.crops.map((c) => DropdownMenuItem(
+                value: c, child: Text(c, style: AppTextStyles.body))).toList(),
             onChanged: (v) => setState(() {
               _crop = v!;
-              _stage = IrrigationService
-                  .cropStages[_crop]!.first;
+              _stage = IrrigationService.cropStages[_crop]!.first;
             }),
           ),
           const SizedBox(height: 12),
-
           _Label('Current Growth Stage'),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: stages.contains(_stage)
-                ? _stage
-                : stages.first,
+            value: stages.contains(_stage) ? _stage : stages.first,
             isExpanded: true,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.background,
-              border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(10)),
-              contentPadding:
-                  const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
-            ),
-            items: stages
-                .map((s) => DropdownMenuItem(
-                    value: s,
-                    child: Text(s,
-                        style: AppTextStyles.bodySmall,
-                        overflow:
-                            TextOverflow.ellipsis)))
-                .toList(),
-            onChanged: (v) =>
-                setState(() => _stage = v!),
+            decoration: InputDecoration(filled: true,
+                fillColor: AppColors.background,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10)),
+            items: stages.map((s) => DropdownMenuItem(
+                value: s, child: Text(s, style: AppTextStyles.bodySmall,
+                overflow: TextOverflow.ellipsis))).toList(),
+            onChanged: (v) => setState(() => _stage = v!),
           ),
           const SizedBox(height: 20),
-
           SizedBox(
-            width: double.infinity,
-            height: 48,
+            width: double.infinity, height: 48,
             child: ElevatedButton(
               onPressed: () async {
                 await widget.provider.updateSetupCrop(
-                  setupId: widget.setup.id,
-                  crop: _crop,
-                  stage: _stage,
-                );
+                    setupId: widget.setup.id, crop: _crop, stage: _stage);
                 if (!mounted) return;
                 Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    AppColors.primaryLight,
+                backgroundColor: AppColors.primaryLight,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Update Crop',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16)),
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             ),
           ),
         ],
@@ -1820,15 +2013,12 @@ class _UpdateCropSheetState
   }
 }
 
-// ---------------------------------------------------------------------------
-
 class _AddSetupFab extends StatefulWidget {
   final TabController tabs;
   const _AddSetupFab({required this.tabs});
 
   @override
-  State<_AddSetupFab> createState() =>
-      _AddSetupFabState();
+  State<_AddSetupFab> createState() => _AddSetupFabState();
 }
 
 class _AddSetupFabState extends State<_AddSetupFab> {
@@ -1838,9 +2028,7 @@ class _AddSetupFabState extends State<_AddSetupFab> {
   void initState() {
     super.initState();
     widget.tabs.addListener(() {
-      if (mounted) {
-        setState(() => _tabIndex = widget.tabs.index);
-      }
+      if (mounted) setState(() => _tabIndex = widget.tabs.index);
     });
   }
 
@@ -1849,15 +2037,13 @@ class _AddSetupFabState extends State<_AddSetupFab> {
     if (_tabIndex != 0) return const SizedBox.shrink();
     return FloatingActionButton.extended(
       onPressed: () => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
+        context: context, isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (_) => const _AddSetupSheet(),
       ),
       backgroundColor: _iBlue,
       icon: const Icon(Icons.add, color: Colors.white),
-      label: Text('Add Plot',
-          style: AppTextStyles.button),
+      label: Text('Add Plot', style: AppTextStyles.button),
     );
   }
 }
@@ -1866,12 +2052,10 @@ class _AddSetupSheet extends StatefulWidget {
   const _AddSetupSheet();
 
   @override
-  State<_AddSetupSheet> createState() =>
-      _AddSetupSheetState();
+  State<_AddSetupSheet> createState() => _AddSetupSheetState();
 }
 
-class _AddSetupSheetState
-    extends State<_AddSetupSheet> {
+class _AddSetupSheetState extends State<_AddSetupSheet> {
   final _nameCtrl = TextEditingController();
   final _areaCtrl = TextEditingController();
   final _flowCtrl = TextEditingController();
@@ -1888,52 +2072,32 @@ class _AddSetupSheetState
   }
 
   Future<void> _save() async {
-    if (_nameCtrl.text.trim().isEmpty ||
-        _areaCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+    if (_nameCtrl.text.trim().isEmpty || _areaCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Enter plot name and area.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+          behavior: SnackBarBehavior.floating));
       return;
     }
     final area = double.tryParse(_areaCtrl.text);
     if (area == null || area <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Enter a valid area.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+          behavior: SnackBarBehavior.floating));
       return;
     }
-
     setState(() => _isSaving = true);
     final user = context.read<AuthProvider>().user;
     if (user == null) return;
-
-    await context
-        .read<IrrigationProvider>()
-        .addSetup(
-          userId: user.userId,
-          plotName: _nameCtrl.text.trim(),
-          areaHa: area,
-          systemType: _system,
-          flowRateLph:
-              double.tryParse(_flowCtrl.text),
-          waterSource: _waterSource,
-        );
-
+    await context.read<IrrigationProvider>().addSetup(
+      userId: user.userId, plotName: _nameCtrl.text.trim(), areaHa: area,
+      systemType: _system, flowRateLph: double.tryParse(_flowCtrl.text),
+      waterSource: _waterSource,
+    );
     if (!mounted) return;
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Irrigation plot added!'),
-        backgroundColor: _iBlue,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+        backgroundColor: _iBlue, behavior: SnackBarBehavior.floating));
   }
 
   @override
@@ -1941,163 +2105,88 @@ class _AddSetupSheetState
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom:
-            MediaQuery.of(context).viewInsets.bottom +
-                24,
+        left: 20, right: 20, top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.divider,
-                  borderRadius:
-                      BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            Center(child: Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: AppColors.divider,
+                    borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 16),
-            Text('Add Irrigation Plot',
-                style: AppTextStyles.heading3),
+            Text('Add Irrigation Plot', style: AppTextStyles.heading3),
             const SizedBox(height: 16),
-
             Row(
               children: [
-                Expanded(
-                  flex: 2,
-                  child: _InputField(
-                    ctrl: _nameCtrl,
-                    label: 'Plot name *',
-                    hint: 'e.g. Block A Tomatoes',
-                  ),
-                ),
+                Expanded(flex: 2, child: _InputField(ctrl: _nameCtrl,
+                    label: 'Plot name *', hint: 'e.g. Block A Tomatoes')),
                 const SizedBox(width: 10),
-                Expanded(
-                  child: _InputField(
-                    ctrl: _areaCtrl,
-                    label: 'Area (ha) *',
-                    hint: '1.0',
-                  ),
-                ),
+                Expanded(child: _InputField(ctrl: _areaCtrl,
+                    label: 'Area (ha) *', hint: '1.0')),
               ],
             ),
             const SizedBox(height: 12),
-
             _Label('Irrigation System'),
             const SizedBox(height: 6),
             Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: IrrigationService.systemTypes
-                  .map((s) {
-                final dummy = IrrigationSetup(
-                  id: '',
-                  userId: '',
-                  plotName: '',
-                  areaHa: 1,
-                  systemType: s,
-                  createdAt: DateTime.now(),
-                );
+              spacing: 8, runSpacing: 6,
+              children: IrrigationService.systemTypes.map((s) {
+                final dummy = IrrigationSetup(id: '', userId: '', plotName: '',
+                    areaHa: 1, systemType: s, createdAt: DateTime.now());
                 return GestureDetector(
-                  onTap: () =>
-                      setState(() => _system = s),
+                  onTap: () => setState(() => _system = s),
                   child: AnimatedContainer(
-                    duration: const Duration(
-                        milliseconds: 150),
-                    padding:
-                        const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6),
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: _system == s
-                          ? _iBlue
-                          : Colors.white,
-                      borderRadius:
-                          BorderRadius.circular(20),
+                      color: _system == s ? _iBlue : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                          color: _system == s
-                              ? _iBlue
-                              : AppColors.divider),
+                          color: _system == s ? _iBlue : AppColors.divider),
                     ),
-                    child: Text(
-                      '${dummy.systemEmoji} ${dummy.systemLabel}',
-                      style: AppTextStyles.caption
-                          .copyWith(
-                        color: _system == s
-                            ? Colors.white
-                            : AppColors.textPrimary,
-                        fontWeight: _system == s
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                      ),
-                    ),
+                    child: Text('${dummy.systemEmoji} ${dummy.systemLabel}',
+                        style: AppTextStyles.caption.copyWith(
+                          color: _system == s ? Colors.white : AppColors.textPrimary,
+                          fontWeight: _system == s ? FontWeight.w700 : FontWeight.w400,
+                        )),
                   ),
                 );
               }).toList(),
             ),
             const SizedBox(height: 12),
-
             Row(
               children: [
-                Expanded(
-                  child: _InputField(
-                    ctrl: _flowCtrl,
-                    label: 'Flow rate (L/hr) opt.',
-                    hint: 'e.g. 5000',
-                  ),
-                ),
+                Expanded(child: _InputField(ctrl: _flowCtrl,
+                    label: 'Flow rate (L/hr) opt.', hint: 'e.g. 5000')),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _Label('Water source'),
                       const SizedBox(height: 4),
                       DropdownButtonFormField<String>(
                         value: _waterSource,
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor:
-                              AppColors.background,
-                          border: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                      10)),
-                          contentPadding:
-                              const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10),
-                          hintText: 'Select…',
-                        ),
+                        decoration: InputDecoration(filled: true,
+                            fillColor: AppColors.background,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            hintText: 'Select…'),
                         isExpanded: true,
-                        items: IrrigationService
-                            .waterSources
-                            .map((s) =>
-                                DropdownMenuItem(
-                                    value: s,
-                                    child: Text(s,
-                                        style: AppTextStyles
-                                            .bodySmall,
-                                        overflow:
-                                            TextOverflow
-                                                .ellipsis)))
-                            .toList(),
-                        onChanged: (v) => setState(
-                            () => _waterSource = v),
+                        items: IrrigationService.waterSources.map((s) =>
+                            DropdownMenuItem(value: s, child: Text(s,
+                                style: AppTextStyles.bodySmall,
+                                overflow: TextOverflow.ellipsis))).toList(),
+                        onChanged: (v) => setState(() => _waterSource = v),
                       ),
                     ],
                   ),
@@ -2105,31 +2194,21 @@ class _AddSetupSheetState
               ],
             ),
             const SizedBox(height: 20),
-
             SizedBox(
-              width: double.infinity,
-              height: 50,
+              width: double.infinity, height: 50,
               child: ElevatedButton(
                 onPressed: _isSaving ? null : _save,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _iBlue,
-                  foregroundColor: Colors.white,
+                  backgroundColor: _iBlue, foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 child: _isSaving
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child:
-                            CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2))
+                    ? const SizedBox(width: 22, height: 22,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
                     : const Text('Add Plot',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16)),
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
               ),
             ),
           ],
@@ -2148,12 +2227,8 @@ class _InputField extends StatelessWidget {
   final String label;
   final String hint;
   final ValueChanged<String>? onChanged;
-  const _InputField({
-    required this.ctrl,
-    required this.label,
-    required this.hint,
-    this.onChanged,
-  });
+  const _InputField({required this.ctrl, required this.label,
+      required this.hint, this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -2163,23 +2238,16 @@ class _InputField extends StatelessWidget {
         _Label(label),
         const SizedBox(height: 4),
         TextField(
-          controller: ctrl,
-          onChanged: onChanged,
-          keyboardType:
-              const TextInputType.numberWithOptions(
-                  decimal: true),
+          controller: ctrl, onChanged: onChanged,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
-            hintText: hint,
-            filled: true,
-            fillColor: AppColors.background,
+            hintText: hint, filled: true, fillColor: AppColors.background,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                  color: AppColors.divider),
+              borderSide: const BorderSide(color: AppColors.divider),
             ),
-            contentPadding:
-                const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 10),
           ),
           style: AppTextStyles.body,
         ),
@@ -2195,87 +2263,58 @@ class _Label extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(text,
-        style: AppTextStyles.caption
-            .copyWith(fontWeight: FontWeight.w600));
+        style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600));
   }
 }
 
 class _TopStat extends StatelessWidget {
-  final String label;
-  final String value;
-  final String emoji;
-  const _TopStat({
-    required this.label,
-    required this.value,
-    required this.emoji,
-  });
+  final String label, value, emoji;
+  const _TopStat({required this.label, required this.value, required this.emoji});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(emoji,
-            style: const TextStyle(fontSize: 20)),
+        Text(emoji, style: const TextStyle(fontSize: 20)),
         const SizedBox(height: 2),
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 16)),
-        Text(label,
-            style: const TextStyle(
-                color: Colors.white70, fontSize: 11)),
+        Text(value, style: const TextStyle(
+            color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
       ],
     );
   }
 }
 
 class _MiniStat extends StatelessWidget {
-  final String label;
-  final String value;
-  const _MiniStat(
-      {required this.label, required this.value});
+  final String label, value;
+  const _MiniStat({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: AppTextStyles.caption
-                .copyWith(color: AppColors.textHint)),
-        Text(value,
-            style: AppTextStyles.body
-                .copyWith(fontWeight: FontWeight.w700)),
+        Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textHint)),
+        Text(value, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700)),
       ],
     );
   }
 }
 
 class _ResultStat extends StatelessWidget {
-  final String label;
-  final String value;
+  final String label, value;
   final bool highlight;
-  const _ResultStat({
-    required this.label,
-    required this.value,
-    this.highlight = false,
-  });
+  const _ResultStat({required this.label, required this.value, this.highlight = false});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: AppTextStyles.caption
-                .copyWith(color: AppColors.textHint)),
-        Text(value,
-            style: AppTextStyles.body.copyWith(
-              fontWeight: FontWeight.w700,
-              color:
-                  highlight ? _iBlue : AppColors.textPrimary,
-            )),
+        Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textHint)),
+        Text(value, style: AppTextStyles.body.copyWith(
+            fontWeight: FontWeight.w700,
+            color: highlight ? _iBlue : AppColors.textPrimary)),
       ],
     );
   }
@@ -2288,9 +2327,8 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: AppTextStyles.label
-            .copyWith(fontWeight: FontWeight.w700, color: color));
+    return Text(text, style: AppTextStyles.label
+        .copyWith(fontWeight: FontWeight.w700, color: color));
   }
 }
 
@@ -2303,18 +2341,13 @@ class _EmptySetups extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('💧',
-                style: TextStyle(fontSize: 56)),
+            const Text('💧', style: TextStyle(fontSize: 56)),
             const SizedBox(height: 16),
-            Text('No irrigation plots yet',
-                style: AppTextStyles.heading3.copyWith(
-                    color: AppColors.textSecondary)),
+            Text('No irrigation plots yet', style: AppTextStyles.heading3
+                .copyWith(color: AppColors.textSecondary)),
             const SizedBox(height: 8),
-            Text(
-              'Tap + Add Plot to register\nyour first irrigated field.',
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
+            Text('Tap + Add Plot to register your first irrigated field.',
+                style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -2331,18 +2364,13 @@ class _EmptySchedule extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('📅',
-                style: TextStyle(fontSize: 56)),
+            const Text('📅', style: TextStyle(fontSize: 56)),
             const SizedBox(height: 16),
-            Text('No schedule yet',
-                style: AppTextStyles.heading3.copyWith(
-                    color: AppColors.textSecondary)),
+            Text('No schedule yet', style: AppTextStyles.heading3
+                .copyWith(color: AppColors.textSecondary)),
             const SizedBox(height: 8),
-            Text(
-              'Add an irrigation plot and assign a crop\nto generate your schedule.',
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
+            Text('Add an irrigation plot and assign a crop to generate your schedule.',
+                style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
           ],
         ),
       ),

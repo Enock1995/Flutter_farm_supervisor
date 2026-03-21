@@ -1,6 +1,7 @@
 // lib/screens/mudhumeni/community_fieldvisits_screens.dart
 // Developed by Sir Enocks — Cor Technologies
-// Contains: CommunityScreen, FieldVisitsScreen, SeasonalCalendarScreen, AreaManagementScreen
+// Contains: CommunityScreen, FieldVisitsScreen, SeasonalCalendarScreen
+// NOTE: AreaManagementScreen has been moved to area_management_screen.dart
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -170,8 +171,7 @@ class _CommunityFeed extends StatelessWidget {
                             Text(post.authorName,
                                 style: AppTextStyles.body
                                     .copyWith(fontWeight: FontWeight.w600)),
-                            Text(dateStr,
-                                style: AppTextStyles.caption),
+                            Text(dateStr, style: AppTextStyles.caption),
                           ],
                         ),
                       ),
@@ -369,8 +369,8 @@ class _CreateCommunityPostState extends State<_CreateCommunityPost> {
                   ),
                 ),
             TextButton.icon(
-              onPressed: () => setState(
-                  () => _pollCtrls.add(TextEditingController())),
+              onPressed: () =>
+                  setState(() => _pollCtrls.add(TextEditingController())),
               icon: const Icon(Icons.add),
               label: const Text('Add Option'),
             ),
@@ -453,8 +453,7 @@ class _FieldVisitsScreenState extends State<FieldVisitsScreen>
             loading: _loading,
             onRefresh: _load,
             onUpdateStatus: (id, status) async {
-              await MudhumeniDatabaseService.updateVisitStatus(
-                  id, status);
+              await MudhumeniDatabaseService.updateVisitStatus(id, status);
               _load();
             },
           ),
@@ -622,8 +621,7 @@ class _RequestVisitTabState extends State<_RequestVisitTab> {
   Future<void> _submit() async {
     if (_issueCtrl.text.trim().isEmpty || _preferredDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please fill in all fields.')),
+        const SnackBar(content: Text('Please fill in all fields.')),
       );
       return;
     }
@@ -635,8 +633,7 @@ class _RequestVisitTabState extends State<_RequestVisitTab> {
       mudhumeniId: widget.mudhumeniId,
       ward: user?.district ?? '',
       issueDescription: _issueCtrl.text.trim(),
-      preferredDate:
-          DateFormat('dd MMM yyyy').format(_preferredDate!),
+      preferredDate: DateFormat('dd MMM yyyy').format(_preferredDate!),
       confirmedDate: '',
       status: 'requested',
       visitNotes: '',
@@ -668,11 +665,10 @@ class _RequestVisitTabState extends State<_RequestVisitTab> {
               labelText: 'Describe the Issue *',
               alignLabelWithHint: true,
               hintText:
-                  'e.g. My maize crop is showing unusual symptoms and I need expert advice...',
+                  'e.g. My maize crop is showing unusual symptoms...',
               prefixIcon: Padding(
                 padding: EdgeInsets.only(bottom: 60),
-                child: Icon(Icons.description_outlined,
-                    color: _green),
+                child: Icon(Icons.description_outlined, color: _green),
               ),
             ),
           ),
@@ -688,8 +684,7 @@ class _RequestVisitTabState extends State<_RequestVisitTab> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_today_outlined,
-                      color: _green),
+                  const Icon(Icons.calendar_today_outlined, color: _green),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -703,8 +698,7 @@ class _RequestVisitTabState extends State<_RequestVisitTab> {
                       ),
                     ),
                   ),
-                  const Icon(Icons.chevron_right,
-                      color: AppColors.textHint),
+                  const Icon(Icons.chevron_right, color: AppColors.textHint),
                 ],
               ),
             ),
@@ -837,16 +831,16 @@ class _CalendarTab extends StatelessWidget {
   });
 
   static const _actColors = {
-    'plant': Color(0xFF2E7D32),
+    'plant':     Color(0xFF2E7D32),
     'fertilize': Color(0xFF1565C0),
-    'spray': Color(0xFFE65100),
-    'harvest': Color(0xFFF9A825),
+    'spray':     Color(0xFFE65100),
+    'harvest':   Color(0xFFF9A825),
   };
   static const _actIcons = {
-    'plant': Icons.eco_outlined,
+    'plant':     Icons.eco_outlined,
     'fertilize': Icons.science_outlined,
-    'spray': Icons.water_drop_outlined,
-    'harvest': Icons.agriculture_outlined,
+    'spray':     Icons.water_drop_outlined,
+    'harvest':   Icons.agriculture_outlined,
   };
 
   @override
@@ -873,8 +867,7 @@ class _CalendarTab extends StatelessWidget {
       itemBuilder: (context, i) {
         final e = entries[i];
         final color = _actColors[e.activityType] ?? AppColors.primary;
-        final icon =
-            _actIcons[e.activityType] ?? Icons.event_outlined;
+        final icon = _actIcons[e.activityType] ?? Icons.event_outlined;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
@@ -905,9 +898,8 @@ class _CalendarTab extends StatelessWidget {
                 color: e.isDone
                     ? AppColors.textHint
                     : AppColors.textPrimary,
-                decoration: e.isDone
-                    ? TextDecoration.lineThrough
-                    : null,
+                decoration:
+                    e.isDone ? TextDecoration.lineThrough : null,
               ),
             ),
             subtitle: Text(
@@ -946,7 +938,7 @@ class _AddEntryTab extends StatefulWidget {
 }
 
 class _AddEntryTabState extends State<_AddEntryTab> {
-  final _cropCtrl = TextEditingController();
+  final _cropCtrl  = TextEditingController();
   final _notesCtrl = TextEditingController();
   String _activityType = 'plant';
   DateTime? _date;
@@ -954,10 +946,10 @@ class _AddEntryTabState extends State<_AddEntryTab> {
 
   static const _green = Color(0xFF558B2F);
   static const _activities = [
-    ('plant', 'Plant', Icons.eco_outlined),
+    ('plant',     'Plant',     Icons.eco_outlined),
     ('fertilize', 'Fertilize', Icons.science_outlined),
-    ('spray', 'Spray', Icons.water_drop_outlined),
-    ('harvest', 'Harvest', Icons.agriculture_outlined),
+    ('spray',     'Spray',     Icons.water_drop_outlined),
+    ('harvest',   'Harvest',   Icons.agriculture_outlined),
   ];
 
   @override
@@ -980,7 +972,8 @@ class _AddEntryTabState extends State<_AddEntryTab> {
   Future<void> _save() async {
     if (_cropCtrl.text.trim().isEmpty || _date == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Crop type and date are required.')),
+        const SnackBar(
+            content: Text('Crop type and date are required.')),
       );
       return;
     }
@@ -1013,8 +1006,7 @@ class _AddEntryTabState extends State<_AddEntryTab> {
             controller: _cropCtrl,
             decoration: const InputDecoration(
               labelText: 'Crop Type *',
-              prefixIcon:
-                  Icon(Icons.eco_outlined, color: _green),
+              prefixIcon: Icon(Icons.eco_outlined, color: _green),
             ),
           ),
           const SizedBox(height: 16),
@@ -1027,7 +1019,8 @@ class _AddEntryTabState extends State<_AddEntryTab> {
                 child: Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: GestureDetector(
-                    onTap: () => setState(() => _activityType = a.$1),
+                    onTap: () =>
+                        setState(() => _activityType = a.$1),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
@@ -1039,8 +1032,9 @@ class _AddEntryTabState extends State<_AddEntryTab> {
                       child: Column(
                         children: [
                           Icon(a.$3,
-                              color:
-                                  sel ? Colors.white : AppColors.textHint,
+                              color: sel
+                                  ? Colors.white
+                                  : AppColors.textHint,
                               size: 20),
                           const SizedBox(height: 3),
                           Text(a.$2,
@@ -1091,7 +1085,8 @@ class _AddEntryTabState extends State<_AddEntryTab> {
             controller: _notesCtrl,
             decoration: const InputDecoration(
               labelText: 'Notes (Optional)',
-              prefixIcon: Icon(Icons.notes_outlined, color: _green),
+              prefixIcon:
+                  Icon(Icons.notes_outlined, color: _green),
             ),
           ),
           const SizedBox(height: 24),
@@ -1113,179 +1108,12 @@ class _AddEntryTabState extends State<_AddEntryTab> {
                           color: Colors.white, strokeWidth: 2))
                   : const Icon(Icons.add_circle_outline,
                       color: Colors.white),
-              label: Text(_saving ? 'Saving...' : 'Add to Calendar',
+              label: Text(
+                  _saving ? 'Saving...' : 'Add to Calendar',
                   style: AppTextStyles.button),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// AREA MANAGEMENT  —  /area-management
-// ═══════════════════════════════════════════════════════════
-class AreaManagementScreen extends StatefulWidget {
-  const AreaManagementScreen({super.key});
-
-  @override
-  State<AreaManagementScreen> createState() => _AreaManagementScreenState();
-}
-
-class _AreaManagementScreenState extends State<AreaManagementScreen> {
-  static const _green = Color(0xFF558B2F);
-
-  // Stub linked farmers list — in production synced from backend
-  final List<Map<String, String>> _linkedFarmers = [
-    {'name': 'John Moyo', 'ward': 'Ward 5', 'farm': 'Moyo Farm — 5ha'},
-    {'name': 'Chipo Sibanda', 'ward': 'Ward 5', 'farm': 'Sibanda Fields — 3ha'},
-    {'name': 'Tapiwa Ncube', 'ward': 'Ward 5', 'farm': 'Ncube Farm — 8ha'},
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final user = context.read<AuthProvider>().user;
-    final ward = user?.district ?? 'General';
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Area & Farmer Management')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FarmSectionHeader(
-              icon: Icons.map_outlined,
-              color: _green,
-              title: 'Your Coverage Area',
-              subtitle: 'Ward: $ward',
-            ),
-            const SizedBox(height: 20),
-
-            // Stats row
-            Row(
-              children: [
-                _StatCard(
-                  icon: Icons.people_outline,
-                  label: 'Linked Farmers',
-                  value: '${_linkedFarmers.length}',
-                  color: _green,
-                ),
-                const SizedBox(width: 12),
-                _StatCard(
-                  icon: Icons.map_outlined,
-                  label: 'Ward Coverage',
-                  value: '1 Ward',
-                  color: AppColors.info,
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            Text('Linked Farmers', style: AppTextStyles.heading3),
-            const SizedBox(height: 12),
-            ..._linkedFarmers.map(
-              (f) => Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.divider),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: _green.withOpacity(0.12),
-                      child: Text(
-                        f['name']![0].toUpperCase(),
-                        style: const TextStyle(
-                            color: _green, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(f['name']!,
-                              style: AppTextStyles.body.copyWith(
-                                  fontWeight: FontWeight.w600)),
-                          Text('${f['ward']} · ${f['farm']}',
-                              style: AppTextStyles.caption),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right,
-                        color: AppColors.textHint),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _green.withOpacity(0.07),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _green.withOpacity(0.2)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      color: Color(0xFF558B2F), size: 18),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Farmers in your ward can link to you by selecting your name during registration. Full farmer management requires backend sync.',
-                      style:
-                          TextStyle(fontSize: 12, color: Color(0xFF558B2F)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  const _StatCard(
-      {required this.icon,
-      required this.label,
-      required this.value,
-      required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 8),
-            Text(value,
-                style: AppTextStyles.heading2.copyWith(color: color)),
-            Text(label, style: AppTextStyles.caption),
-          ],
-        ),
       ),
     );
   }

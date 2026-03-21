@@ -50,6 +50,7 @@ class MudhumeniDatabaseService {
         answered_by TEXT DEFAULT '',
         answered_by_mudhumeni INTEGER DEFAULT 0,
         upvotes INTEGER DEFAULT 0,
+        upvoted_by TEXT NOT NULL DEFAULT '',
         made_public INTEGER DEFAULT 0,
         created_at TEXT NOT NULL,
         answered_at TEXT DEFAULT ''
@@ -145,6 +146,27 @@ class MudhumeniDatabaseService {
     );
   }
 
+  static Future<List<MudhumeniProfile>> getAllMudhumeniProfiles() async {
+    final db = await DatabaseService().database;
+    final rows = await db.query(
+      'mudhumeni_profiles',
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(MudhumeniProfile.fromMap).toList();
+  }
+
+  /// Returns verified Mudhumeni profiles for a given ward.
+  static Future<List<MudhumeniProfile>> getVerifiedMudhumeniByWard(
+      String ward) async {
+    final db = await DatabaseService().database;
+    final rows = await db.query(
+      'mudhumeni_profiles',
+      where: 'ward = ? AND status = ?',
+      whereArgs: [ward, 'verified'],
+    );
+    return rows.map(MudhumeniProfile.fromMap).toList();
+  }
+
   // ── KNOWLEDGE POSTS ───────────────────────────────────
   static Future<int> savePost(KnowledgePost post) async {
     final db = await DatabaseService().database;
@@ -200,6 +222,17 @@ class MudhumeniDatabaseService {
     return rows.map(QaQuestion.fromMap).toList();
   }
 
+  /// Returns all private questions sent TO a specific mudhumeni.
+  static Future<List<QaQuestion>> getPrivateQuestionsForMudhumeni(
+      String mudhumeniId) async {
+    final db = await DatabaseService().database;
+    final rows = await db.query('qa_questions',
+        where: 'target_mudhumeni_id = ? AND is_public = 0',
+        whereArgs: [mudhumeniId],
+        orderBy: 'created_at DESC');
+    return rows.map(QaQuestion.fromMap).toList();
+  }
+
   static Future<void> answerQuestion(int id, String answer,
       String answeredBy, bool byMudhumeni) async {
     final db = await DatabaseService().database;
@@ -216,10 +249,87 @@ class MudhumeniDatabaseService {
     );
   }
 
+  /// Toggle upvote — one per user. Returns true if upvote added,
+  /// false if removed (toggled off).
+  static Future<bool> toggleUpvote(int questionId, String userId) async {
+    final db = await DatabaseService().database;
+    final rows = await db.query('qa_questions',
+        columns: ['upvotes', 'upvoted_by'],
+        where: 'id = ?',
+        whereArgs: [questionId],
+        limit: 1);
+    if (rows.isEmpty) return false;
+
+    final currentUpvotes = rows.first['upvotes'] as int? ?? 0;
+    final upvotedBy = rows.first['upvoted_by'] as String? ?? '';
+    final voters = upvotedBy.isEmpty
+        ? <String>[]
+        : upvotedBy.split(',').map((e) => e.trim()).toList();
+
+    final alreadyVoted = voters.contains(userId);
+
+    if (alreadyVoted) {
+      // Remove vote
+      voters.remove(userId);
+      await db.update(
+        'qa_questions',
+        {
+          'upvotes': (currentUpvotes - 1).clamp(0, 99999),
+          'upvoted_by': voters.join(','),
+        },
+        where: 'id = ?',
+        whereArgs: [questionId],
+      );
+      return false;
+    } else {
+      // Add vote
+      voters.add(userId);
+      await db.update(
+        'qa_questions',
+        {
+          'upvotes': currentUpvotes + 1,
+          'upvoted_by': voters.join(','),
+        },
+        where: 'id = ?',
+        whereArgs: [questionId],
+      );
+      return true;
+    }
+  }
+
+  /// Legacy — kept for compatibility. Use toggleUpvote instead.
   static Future<void> upvoteQuestion(int id) async {
     final db = await DatabaseService().database;
     await db.rawUpdate(
         'UPDATE qa_questions SET upvotes = upvotes + 1 WHERE id = ?', [id]);
+  }
+
+  /// Returns the set of question IDs that a given user has already upvoted.
+  /// Reads from the upvoted_by TEXT column on qa_questions (comma-separated).
+  static Future<Set<int>> getUserUpvotedIds(String userId) async {
+    if (userId.isEmpty) return {};
+    try {
+      final db = await DatabaseService().database;
+      final rows = await db.query(
+        'qa_questions',
+        columns: ['id', 'upvoted_by'],
+        where: "upvoted_by LIKE ?",
+        whereArgs: ['%$userId%'],
+      );
+      final Set<int> result = {};
+      for (final row in rows) {
+        final id = row['id'] as int?;
+        final upvotedBy = row['upvoted_by'] as String? ?? '';
+        // Confirm exact match (LIKE can return partial matches)
+        if (id != null &&
+            upvotedBy.split(',').map((e) => e.trim()).contains(userId)) {
+          result.add(id);
+        }
+      }
+      return result;
+    } catch (_) {
+      return {};
+    }
   }
 
   static Future<void> makePublic(int id) async {
@@ -320,7 +430,8 @@ class MudhumeniDatabaseService {
 
   static Future<void> deleteEntry(int id) async {
     final db = await DatabaseService().database;
-    await db.delete('seasonal_calendar', where: 'id = ?', whereArgs: [id]);
+    await db.delete('seasonal_calendar',
+        where: 'id = ?', whereArgs: [id]);
   }
 
   // ── PROBLEM REPORTS ───────────────────────────────────
