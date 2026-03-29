@@ -402,6 +402,8 @@ class _PayrollHistoryTab extends StatefulWidget {
 }
 
 class _PayrollHistoryTabState extends State<_PayrollHistoryTab> {
+  bool _isRetrying = false;
+
   @override
   Widget build(BuildContext context) {
     if (widget.records.isEmpty) {
@@ -433,6 +435,9 @@ class _PayrollHistoryTabState extends State<_PayrollHistoryTab> {
                   r.paynowPollUrl != null
               ? () => _pollPayment(r)
               : null,
+          onRetry: r.status == PayrollStatus.failed
+              ? () => _retryPayment(r)
+              : null,
         );
       },
     );
@@ -451,6 +456,72 @@ class _PayrollHistoryTabState extends State<_PayrollHistoryTab> {
             confirmed ? AppColors.success : AppColors.warning,
         behavior: SnackBarBehavior.floating,
       ));
+    }
+  }
+
+  Future<void> _retryPayment(PayrollRecord r) async {
+    if (_isRetrying) return;
+    
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Retry Payment'),
+        content: Text(
+          'Retry payment of \$${r.totalAmountUsd.toStringAsFixed(2)} USD to ${r.workerName}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+            ),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isRetrying = true);
+
+    try {
+      final success = await context
+          .read<PayrollFieldReportProvider>()
+          .payWorker(
+            record: r,
+            paynowIntegrationId: AppConfig.paynowIntegrationId,
+            paynowIntegrationKey: AppConfig.paynowIntegrationKey,
+            returnUrl: AppConfig.paynowReturnUrl,
+            resultUrl: AppConfig.paynowResultUrl,
+          );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(success
+              ? '✅ Payment retry initiated for ${r.workerName}'
+              : '❌ Payment retry failed'),
+          backgroundColor: success ? AppColors.success : AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRetrying = false);
+      }
     }
   }
 }
@@ -481,78 +552,92 @@ class _PayrollPreviewCard extends StatelessWidget {
               offset: const Offset(0, 2))
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: Text(
-                record.workerName[0].toUpperCase(),
-                style: const TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800),
+          // Worker info row
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Text(
+                    record.workerName[0].toUpperCase(),
+                    style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800),
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(record.workerName,
-                    style: AppTextStyles.body
-                        .copyWith(fontWeight: FontWeight.w700)),
-                Text(
-                  '${record.hoursWorked.toStringAsFixed(1)} hrs × \$${record.hourlyRateUsd.toStringAsFixed(2)}/hr',
-                  style: AppTextStyles.caption,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(record.workerName,
+                        style: AppTextStyles.body
+                            .copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      '${record.hoursWorked.toStringAsFixed(1)} hrs × \$${record.hourlyRateUsd.toStringAsFixed(2)}/hr',
+                      style: AppTextStyles.caption,
+                    ),
+                    Text(
+                      record.workerPhone,
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.primary),
+                    ),
+                  ],
                 ),
-                Text(
-                  record.workerPhone,
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.primary),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          const SizedBox(height: 12),
+          // Amount and Pay button row
+          Row(
             children: [
               Text(
-                '\$${record.totalAmountUsd.toStringAsFixed(2)}',
+                'Total: ',
+                style: AppTextStyles.caption,
+              ),
+              Text(
+                '\$${record.totalAmountUsd.toStringAsFixed(2)} USD',
                 style: AppTextStyles.body.copyWith(
                     color: AppColors.success,
                     fontWeight: FontWeight.w800,
                     fontSize: 16),
               ),
-              const SizedBox(height: 6),
+              const Spacer(),
               SizedBox(
-                height: 34,
-                child: ElevatedButton(
+                height: 36,
+                child: ElevatedButton.icon(
                   onPressed: onPay,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.success,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14),
+                        horizontal: 16, vertical: 8),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
                   ),
-                  child: isPaying
+                  icon: isPaying
                       ? const SizedBox(
-                          width: 16,
-                          height: 16,
+                          width: 14,
+                          height: 14,
                           child: CircularProgressIndicator(
                               color: Colors.white, strokeWidth: 2))
-                      : const Text('Pay',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700)),
+                      : const Icon(Icons.payments, size: 16),
+                  label: Text(
+                    isPaying ? 'Paying...' : 'Pay',
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
             ],
@@ -567,7 +652,12 @@ class _PayrollPreviewCard extends StatelessWidget {
 class _PayrollHistoryCard extends StatelessWidget {
   final PayrollRecord record;
   final VoidCallback? onPoll;
-  const _PayrollHistoryCard({required this.record, this.onPoll});
+  final VoidCallback? onRetry;
+  const _PayrollHistoryCard({
+    required this.record,
+    this.onPoll,
+    this.onRetry,
+  });
 
   Color get _statusColor {
     switch (record.status) {
@@ -655,6 +745,25 @@ class _PayrollHistoryCard extends StatelessWidget {
                     style: TextStyle(
                         color: AppColors.warning,
                         fontSize: 12)),
+              ),
+            ),
+          ],
+          if (onRetry != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 34,
+              child: ElevatedButton.icon(
+                onPressed: onRetry,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Retry Payment',
+                    style: TextStyle(fontSize: 12)),
               ),
             ),
           ],

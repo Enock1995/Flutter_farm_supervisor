@@ -672,16 +672,27 @@ class _AppointTabState extends State<_AppointTab> {
                 child: TextField(
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.phone,
+                  style: AppTextStyles.body,
                   decoration: InputDecoration(
                     hintText: 'e.g. 0771234567',
+                    hintStyle: AppTextStyles.body.copyWith(
+                        color: AppColors.textHint),
                     prefixIcon: const Icon(Icons.phone_outlined,
                         color: _kNational),
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: AppColors.divider)),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: AppColors.divider)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                            color: _kNational, width: 2)),
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                        horizontal: 16, vertical: 16),
                   ),
                 ),
               ),
@@ -692,7 +703,7 @@ class _AppointTabState extends State<_AppointTab> {
                   backgroundColor: _kNational,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
+                      horizontal: 20, vertical: 18),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
@@ -702,7 +713,10 @@ class _AppointTabState extends State<_AppointTab> {
                         height: 18,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : const Text('Search'),
+                    : const Text('Search',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600)),
               ),
             ],
           ),

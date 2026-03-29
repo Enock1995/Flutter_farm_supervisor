@@ -187,7 +187,7 @@ class _PrivateQaScreenState extends State<PrivateQaScreen>
     if (_isMudhumeniOrAdmin) {
       // Mudhumeni sees private questions sent to their userId
       final questions = await MudhumeniDatabaseService
-          .getPrivateQuestions('', _userId);
+          .getPrivateQuestionsForMudhumeni(_userId);
       setState(() { _questions = questions; _loading = false; });
     } else {
       // Farmer — load verified mudhumeni in their ward first
