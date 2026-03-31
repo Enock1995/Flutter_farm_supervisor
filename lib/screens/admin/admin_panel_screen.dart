@@ -1,5 +1,5 @@
 // lib/screens/admin/admin_panel_screen.dart
-// Developed by Sir Enocks — Cor Technologies
+// Developed by Sir Enocks Cor Technologies
 // Hierarchy: national_admin → provincial_admin → district_admin → mudhumeni → farmer
 
 import 'package:flutter/material.dart';
@@ -10,6 +10,8 @@ import '../../services/mudhumeni_database_service.dart';
 import '../../services/database_service.dart';
 import '../../models/mudhumeni_model.dart';
 import '../../models/user_model.dart';
+import '../../models/vet_model.dart';
+import '../../services/vet_database_service.dart';
 import '../../config/app_config.dart';
 
 // Role colours
@@ -53,7 +55,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 
   int get _tabCount {
-    if (_me.isNationalAdmin) return 4; // Pending | Authorities | All Users | Appoint
+    if (_me.isNationalAdmin) return 5; // Pending Mudhumeni | Pending Vets | Authorities | All Users | Appoint
     if (_me.isProvincialAdmin) return 3; // Pending | District Admins | Mudhumeni
     return 2; // Pending | Mudhumeni
   }
@@ -130,7 +132,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final pendingCount = _pendingMudhumeni.length;
     if (_me.isNationalAdmin) {
       return [
-        Tab(text: 'Pending ($pendingCount)'),
+        Tab(text: 'Pending Mudhumeni'),
+        const Tab(text: 'Pending Vets'),
         const Tab(text: 'Authorities'),
         const Tab(text: 'All Users'),
         const Tab(text: '+ Appoint'),
@@ -154,6 +157,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     if (_me.isNationalAdmin) {
       return [
         _PendingTab(profiles: _pendingMudhumeni, me: _me, onAction: _load),
+        _PendingVetsTab(onApproved: _load),
         _AuthoritiesTab(users: _managedUsers, me: _me, onAction: _load),
         _AllUsersTab(users: _managedUsers, me: _me, onAction: _load),
         _AppointTab(me: _me, onAppointed: _load),
@@ -372,6 +376,237 @@ class _PendingCard extends StatelessWidget {
           ],
         ),
       );
+}
+
+// =============================================================================
+// PENDING VETS TAB
+// =============================================================================
+class _PendingVetsTab extends StatefulWidget {
+  final VoidCallback onApproved;
+  const _PendingVetsTab({required this.onApproved});
+
+  @override
+  State<_PendingVetsTab> createState() => _PendingVetsTabState();
+}
+
+class _PendingVetsTabState extends State<_PendingVetsTab> {
+  List<VetProfile> _pendingVets = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final vets = await VetDatabaseService.getPendingVets();
+      if (mounted) {
+        setState(() {
+          _pendingVets = vets;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _approve(VetProfile vet) async {
+    final confirm = await _confirm(
+      context,
+      'Approve Vet?',
+      'Approve ${vet.fullName} as a Veterinary Officer?\n\n'
+      'Registration: ${vet.registrationNumber}\n'
+      'Specialization: ${vet.specializationEnum.label}\n'
+      'Service Area: ${vet.district}, ${vet.wards}',
+      confirmLabel: 'Approve',
+      confirmColor: AppColors.success,
+    );
+
+    if (!confirm || !context.mounted) return;
+
+    try {
+      await VetDatabaseService.updateProfileStatus(vet.id!, 'verified');
+      await DatabaseService().updateUserRole(vet.userId, 'vet');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${vet.fullName} approved as Veterinary Officer'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        _load();
+        widget.onApproved();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error approving vet: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _reject(VetProfile vet) async {
+    final reason = await _reasonDialog(
+      context,
+      'Reject Application',
+      '${vet.fullName}\'s Veterinary Officer application',
+    );
+
+    if (reason == null || !context.mounted) return;
+
+    try {
+      await VetDatabaseService.updateProfileStatus(vet.id!, 'suspended');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Application rejected: ${vet.fullName}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error rejecting application: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_pendingVets.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.medical_services_outlined,
+                size: 64, color: AppColors.textHint),
+            const SizedBox(height: 16),
+            Text('No pending vet applications',
+                style: AppTextStyles.body.copyWith(color: AppColors.textHint)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _pendingVets.length,
+      itemBuilder: (context, index) {
+        final vet = _pendingVets[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: const Color(0xFF2E7D32).withOpacity(0.1),
+                      child: const Icon(Icons.medical_services,
+                          color: Color(0xFF2E7D32), size: 32),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(vet.fullName, style: AppTextStyles.heading4),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${vet.qualification} • ${vet.specializationEnum.label}',
+                            style: AppTextStyles.bodySmall
+                                .copyWith(color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+                _buildInfoRow('Registration', vet.registrationNumber, Icons.badge),
+                _buildInfoRow('Experience', '${vet.yearsExperience} years', Icons.work),
+                _buildInfoRow('Phone', vet.phone, Icons.phone),
+                _buildInfoRow('District', vet.district, Icons.location_city),
+                _buildInfoRow('Wards', vet.wards, Icons.map),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _reject(vet),
+                        icon: const Icon(Icons.close),
+                        label: const Text('Reject'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _approve(vet),
+                        icon: const Icon(Icons.check),
+                        label: const Text('Approve'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 8),
+          Text('$label: ',
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textSecondary)),
+          Expanded(
+            child: Text(value,
+                style: AppTextStyles.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // =============================================================================

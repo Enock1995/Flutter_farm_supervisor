@@ -1,5 +1,5 @@
 // lib/models/mudhumeni_model.dart
-// Developed by Sir Enocks — Cor Technologies
+// Developed by Sir Enocks Cor Technologies
 
 class MudhumeniProfile {
   final int? id;
@@ -8,8 +8,8 @@ class MudhumeniProfile {
   final String employeeId;
   final String ward;
   final String district;
-  final String idPhotoPath; // local file path
-  final String status; // 'pending' | 'verified' | 'rejected'
+  final String idPhotoPath;
+  final String status;
   final String createdAt;
 
   const MudhumeniProfile({
@@ -56,7 +56,7 @@ class KnowledgePost {
   final String authorName;
   final String ward;
   final String district;
-  final String postType; // 'tip'|'pest_alert'|'disease_alert'|'seasonal'|'weather'
+  final String postType;
   final String title;
   final String body;
   final String photoPath;
@@ -111,10 +111,10 @@ class QaQuestion {
   final String authorId;
   final String authorName;
   final String ward;
-  final String targetMudhumeniId; // '' = public
+  final String targetMudhumeniId;
   final bool isPublic;
   final String question;
-  final String answer; // '' = unanswered
+  final String answer;
   final String answeredBy;
   final bool answeredByMudhumeni;
   final int upvotes;
@@ -179,10 +179,10 @@ class CommunityPost {
   final String authorId;
   final String authorName;
   final String ward;
-  final String postType; // 'text'|'photo'|'poll'
+  final String postType;
   final String content;
   final String photoPath;
-  final String pollOptions; // JSON encoded list
+  final String pollOptions;
   final int reactions;
   final bool isDeleted;
   final String createdAt;
@@ -230,59 +230,82 @@ class CommunityPost {
       };
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// UPDATED FIELD VISIT MODEL (WITH NEW FIELDS)
+// ══════════════════════════════════════════════════════════════════════════════
+
 class FieldVisit {
   final int? id;
   final String farmerId;
   final String farmerName;
+  final String farmerPhone;
   final String mudhumeniId;
+  final String? mudhumeniName;
   final String ward;
-  final String issueDescription;
-  final String preferredDate;
-  final String confirmedDate;
-  final String status; // 'requested'|'confirmed'|'rescheduled'|'completed'
-  final String visitNotes;
-  final String createdAt;
+  final String purpose;
+  final String notes;
+  final DateTime requestedDate;
+  final DateTime? scheduledDate;
+  final String status; // 'pending', 'scheduled', 'completed', 'cancelled'
 
   const FieldVisit({
     this.id,
     required this.farmerId,
     required this.farmerName,
+    required this.farmerPhone,
     required this.mudhumeniId,
+    this.mudhumeniName,
     required this.ward,
-    required this.issueDescription,
-    required this.preferredDate,
-    required this.confirmedDate,
+    required this.purpose,
+    required this.notes,
+    required this.requestedDate,
+    this.scheduledDate,
     required this.status,
-    required this.visitNotes,
-    required this.createdAt,
   });
 
-  factory FieldVisit.fromMap(Map<String, dynamic> m) => FieldVisit(
-        id: m['id'] as int?,
-        farmerId: m['farmer_id'] as String? ?? '',
-        farmerName: m['farmer_name'] as String? ?? '',
-        mudhumeniId: m['mudhumeni_id'] as String? ?? '',
-        ward: m['ward'] as String? ?? '',
-        issueDescription: m['issue_description'] as String? ?? '',
-        preferredDate: m['preferred_date'] as String? ?? '',
-        confirmedDate: m['confirmed_date'] as String? ?? '',
-        status: m['status'] as String? ?? 'requested',
-        visitNotes: m['visit_notes'] as String? ?? '',
-        createdAt: m['created_at'] as String? ?? '',
-      );
+  factory FieldVisit.fromMap(Map<String, dynamic> m) {
+    return FieldVisit(
+      id: m['id'] as int?,
+      farmerId: m['farmer_id'] as String? ?? '',
+      farmerName: m['farmer_name'] as String? ?? '',
+      farmerPhone: m['farmer_phone'] as String? ?? '',
+      mudhumeniId: m['mudhumeni_id'] as String? ?? '',
+      mudhumeniName: m['mudhumeni_name'] as String?,
+      ward: m['ward'] as String? ?? '',
+      purpose: m['purpose'] as String? ?? m['issue_description'] as String? ?? '',
+      notes: m['notes'] as String? ?? m['visit_notes'] as String? ?? '',
+      requestedDate: _parseDate(m['requested_date']) ?? 
+                     _parseDate(m['preferred_date']) ?? 
+                     DateTime.now(),
+      scheduledDate: _parseDate(m['scheduled_date']) ?? 
+                     _parseDate(m['confirmed_date']),
+      status: m['status'] as String? ?? 'pending',
+    );
+  }
+
+  static DateTime? _parseDate(dynamic date) {
+    if (date == null || date == '') return null;
+    try {
+      return DateTime.parse(date as String);
+    } catch (_) {
+      return null;
+    }
+  }
 
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,
         'farmer_id': farmerId,
         'farmer_name': farmerName,
+        'farmer_phone': farmerPhone,
         'mudhumeni_id': mudhumeniId,
+        'mudhumeni_name': mudhumeniName ?? '',
         'ward': ward,
-        'issue_description': issueDescription,
-        'preferred_date': preferredDate,
-        'confirmed_date': confirmedDate,
+        'purpose': purpose,
+        'notes': notes,
+        'requested_date': requestedDate.toIso8601String(),
+        'scheduled_date': scheduledDate?.toIso8601String() ?? '',
         'status': status,
-        'visit_notes': visitNotes,
-        'created_at': createdAt,
+        'created_at': DateTime.now().toIso8601String(),
       };
 }
 
@@ -291,11 +314,11 @@ class SeasonalEntry {
   final String mudhumeniId;
   final String ward;
   final String cropType;
-  final String activityType; // 'plant'|'fertilize'|'spray'|'harvest'
+  final String activityType;
   final String scheduledDate;
   final String notes;
   final bool isDone;
-  final String season; // e.g. '2025/2026'
+  final String season;
   final String createdAt;
 
   const SeasonalEntry({
@@ -344,7 +367,7 @@ class ProblemReport {
   final String reporterName;
   final String ward;
   final String district;
-  final String problemType; // 'pest'|'disease'|'weather'|'other'
+  final String problemType;
   final String description;
   final String cropAffected;
   final double latitude;

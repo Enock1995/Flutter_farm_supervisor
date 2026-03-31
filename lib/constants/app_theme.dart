@@ -46,6 +46,11 @@ class AppTextStyles {
     fontFamily: _fontFamily, fontSize: 16,
     fontWeight: FontWeight.w600, color: AppColors.textPrimary,
   );
+  static const TextStyle heading4 = TextStyle(
+    fontFamily: _fontFamily, fontSize: 16,
+    fontWeight: FontWeight.w600, color: AppColors.textPrimary,
+    height: 1.3,
+  );
   static const TextStyle bodyLarge = TextStyle(
     fontFamily: _fontFamily, fontSize: 16,
     fontWeight: FontWeight.w400, color: AppColors.textPrimary,
@@ -141,7 +146,6 @@ class AppTheme {
         hintStyle:
             AppTextStyles.body.copyWith(color: AppColors.textHint),
       ),
-      // FIXED: CardThemeData instead of CardTheme
       cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 2,

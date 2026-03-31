@@ -1,410 +1,17 @@
 // lib/screens/mudhumeni/community_fieldvisits_screens.dart
-// Developed by Sir Enocks — Cor Technologies
-// Contains: CommunityScreen, FieldVisitsScreen, SeasonalCalendarScreen
-// NOTE: AreaManagementScreen has been moved to area_management_screen.dart
+// Developed by Sir Enocks Cor Technologies
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../../constants/app_theme.dart';
 import '../../providers/auth_provider.dart';
-import '../../models/mudhumeni_model.dart';
 import '../../services/mudhumeni_database_service.dart';
-import '../farm_management/farm_management_shared_widgets.dart';
+import '../../models/mudhumeni_model.dart';
 
-// ═══════════════════════════════════════════════════════════
-// COMMUNITY  —  /community
-// ═══════════════════════════════════════════════════════════
-class CommunityScreen extends StatefulWidget {
-  const CommunityScreen({super.key});
+// ══════════════════════════════════════════════════════════════════════════════
+// FIELD VISITS SCREEN
+// ══════════════════════════════════════════════════════════════════════════════
 
-  @override
-  State<CommunityScreen> createState() => _CommunityScreenState();
-}
-
-class _CommunityScreenState extends State<CommunityScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabs;
-  List<CommunityPost> _posts = [];
-  bool _loading = true;
-
-  String get _ward =>
-      context.read<AuthProvider>().user?.district ?? 'General';
-
-  @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: 2, vsync: this);
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    final posts = await MudhumeniDatabaseService.getCommunityPosts(_ward);
-    setState(() { _posts = posts; _loading = false; });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Farmer Community'),
-        bottom: TabBar(
-          controller: _tabs,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [Tab(text: 'Feed'), Tab(text: 'Post')],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabs,
-        children: [
-          _CommunityFeed(
-            posts: _posts,
-            loading: _loading,
-            onRefresh: _load,
-            onReact: (id) async {
-              await MudhumeniDatabaseService.reactToPost(id);
-              _load();
-            },
-            onDelete: (id) async {
-              await MudhumeniDatabaseService.deletePost(id);
-              _load();
-            },
-          ),
-          _CreateCommunityPost(
-            ward: _ward,
-            onCreated: () {
-              _load();
-              _tabs.animateTo(0);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CommunityFeed extends StatelessWidget {
-  final List<CommunityPost> posts;
-  final bool loading;
-  final VoidCallback onRefresh;
-  final Function(int) onReact;
-  final Function(int) onDelete;
-
-  const _CommunityFeed({
-    required this.posts,
-    required this.loading,
-    required this.onRefresh,
-    required this.onReact,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
-    if (posts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.groups_outlined,
-                size: 64, color: AppColors.textHint),
-            const SizedBox(height: 12),
-            Text('No posts yet. Be the first!',
-                style: AppTextStyles.body
-                    .copyWith(color: AppColors.textSecondary)),
-          ],
-        ),
-      );
-    }
-    return RefreshIndicator(
-      onRefresh: () async => onRefresh(),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: posts.length,
-        itemBuilder: (context, i) {
-          final post = posts[i];
-          final date = DateTime.tryParse(post.createdAt);
-          final dateStr =
-              date != null ? DateFormat('dd MMM HH:mm').format(date) : '';
-          final pollOptions = post.postType == 'poll'
-              ? List<String>.from(jsonDecode(post.pollOptions))
-              : <String>[];
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor:
-                            AppColors.primary.withOpacity(0.12),
-                        child: Text(
-                          post.authorName.isNotEmpty
-                              ? post.authorName[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(post.authorName,
-                                style: AppTextStyles.body
-                                    .copyWith(fontWeight: FontWeight.w600)),
-                            Text(dateStr, style: AppTextStyles.caption),
-                          ],
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        onSelected: (v) {
-                          if (v == 'delete') onDelete(post.id!);
-                        },
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Delete Post')),
-                        ],
-                        child: const Icon(Icons.more_vert,
-                            color: AppColors.textHint),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (post.content.isNotEmpty)
-                    Text(post.content, style: AppTextStyles.body),
-                  if (pollOptions.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    ...pollOptions.map((opt) => Container(
-                          margin: const EdgeInsets.only(bottom: 6),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.divider),
-                          ),
-                          child: Text(opt, style: AppTextStyles.body),
-                        )),
-                  ],
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => onReact(post.id!),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.favorite_outline,
-                                size: 18, color: AppColors.error),
-                            const SizedBox(width: 4),
-                            Text('${post.reactions}',
-                                style: AppTextStyles.caption),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _CreateCommunityPost extends StatefulWidget {
-  final String ward;
-  final VoidCallback onCreated;
-  const _CreateCommunityPost(
-      {required this.ward, required this.onCreated});
-
-  @override
-  State<_CreateCommunityPost> createState() =>
-      _CreateCommunityPostState();
-}
-
-class _CreateCommunityPostState extends State<_CreateCommunityPost> {
-  final _contentCtrl = TextEditingController();
-  String _postType = 'text';
-  final List<TextEditingController> _pollCtrls = [
-    TextEditingController(),
-    TextEditingController(),
-  ];
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    _contentCtrl.dispose();
-    for (final c in _pollCtrls) c.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_contentCtrl.text.trim().isEmpty && _postType != 'poll') return;
-    setState(() => _saving = true);
-    final user = context.read<AuthProvider>().user;
-
-    final pollOptions = _postType == 'poll'
-        ? jsonEncode(_pollCtrls
-            .map((c) => c.text.trim())
-            .where((s) => s.isNotEmpty)
-            .toList())
-        : '[]';
-
-    final post = CommunityPost(
-      authorId: user?.userId ?? '',
-      authorName: user?.fullName ?? '',
-      ward: widget.ward,
-      postType: _postType,
-      content: _contentCtrl.text.trim(),
-      photoPath: '',
-      pollOptions: pollOptions,
-      reactions: 0,
-      isDeleted: false,
-      createdAt: DateTime.now().toIso8601String(),
-    );
-    await MudhumeniDatabaseService.saveCommunityPost(post);
-    setState(() => _saving = false);
-    widget.onCreated();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Post Type', style: AppTextStyles.heading3),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              for (final t in [
-                ('text', 'Text', Icons.text_fields),
-                ('poll', 'Poll', Icons.poll_outlined),
-              ])
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _postType = t.$1),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: _postType == t.$1
-                              ? AppColors.primary
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: _postType == t.$1
-                                  ? AppColors.primary
-                                  : AppColors.divider),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(t.$3,
-                                color: _postType == t.$1
-                                    ? Colors.white
-                                    : AppColors.textSecondary),
-                            const SizedBox(height: 4),
-                            Text(t.$2,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: _postType == t.$1
-                                        ? Colors.white
-                                        : AppColors.textSecondary)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_postType != 'poll')
-            TextField(
-              controller: _contentCtrl,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'What\'s on your mind?',
-                alignLabelWithHint: true,
-              ),
-            ),
-          if (_postType == 'poll') ...[
-            TextField(
-              controller: _contentCtrl,
-              decoration: const InputDecoration(labelText: 'Poll Question'),
-            ),
-            const SizedBox(height: 12),
-            ..._pollCtrls.asMap().entries.map(
-                  (e) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: TextField(
-                      controller: e.value,
-                      decoration: InputDecoration(
-                          labelText: 'Option ${e.key + 1}'),
-                    ),
-                  ),
-                ),
-            TextButton.icon(
-              onPressed: () =>
-                  setState(() => _pollCtrls.add(TextEditingController())),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Option'),
-            ),
-          ],
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 52),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              icon: _saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.send_outlined, color: Colors.white),
-              label: Text(_saving ? 'Posting...' : 'Post to Community',
-                  style: AppTextStyles.button),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// FIELD VISITS  —  /field-visits
-// ═══════════════════════════════════════════════════════════
 class FieldVisitsScreen extends StatefulWidget {
   const FieldVisitsScreen({super.key});
 
@@ -414,707 +21,1112 @@ class FieldVisitsScreen extends StatefulWidget {
 
 class _FieldVisitsScreenState extends State<FieldVisitsScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabs;
-  List<FieldVisit> _visits = [];
-  bool _loading = true;
-
-  static const _stubMudhumeniId = 'mudhumeni_001';
-  static const _green = Color(0xFF558B2F);
+  late TabController _tabController;
+  
+  List<FieldVisit> _myVisits = [];
+  List<FieldVisit> _pendingRequests = [];
+  List<FieldVisit> _allVisits = [];
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
-    _load();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadVisits();
   }
 
   @override
   void dispose() {
-    _tabs.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    final user = context.read<AuthProvider>().user;
-    final visits = await MudhumeniDatabaseService.getVisitsByFarmer(
-        user?.userId ?? '');
-    setState(() { _visits = visits; _loading = false; });
+  Future<void> _loadVisits() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final user = context.read<AuthProvider>().user;
+      if (user == null) throw Exception('No user logged in');
+
+      if (user.isMudhumeni || user.isAdmin) {
+        // Mudhumeni/Admin: Load visits assigned to them + pending requests in their area
+        _myVisits = await MudhumeniDatabaseService.getVisitsByMudhumeni(user.userId);
+        _pendingRequests = await MudhumeniDatabaseService.getPendingVisitsInWard(user.ward);
+        _allVisits = await MudhumeniDatabaseService.getAllVisitsInWard(user.ward);
+      } else {
+        // Farmer: Load their own visit requests
+        _myVisits = await MudhumeniDatabaseService.getVisitsByFarmer(user.userId);
+        _pendingRequests = [];
+        _allVisits = [];
+      }
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Field Visit Scheduler')),
-      body: TabBarView(
-        controller: _tabs,
-        children: [
-          _VisitListTab(
-            visits: _visits,
-            loading: _loading,
-            onRefresh: _load,
-            onUpdateStatus: (id, status) async {
-              await MudhumeniDatabaseService.updateVisitStatus(id, status);
-              _load();
-            },
-          ),
-          _RequestVisitTab(
-            mudhumeniId: _stubMudhumeniId,
-            onRequested: () {
-              _load();
-              _tabs.animateTo(0);
-            },
-          ),
-        ],
-      ),
-      bottomNavigationBar: TabBar(
-        controller: _tabs,
-        labelColor: _green,
-        unselectedLabelColor: AppColors.textHint,
-        indicatorColor: _green,
-        tabs: const [
-          Tab(icon: Icon(Icons.list_alt_outlined), text: 'My Requests'),
-          Tab(icon: Icon(Icons.add_circle_outline), text: 'Request Visit'),
-        ],
-      ),
-    );
-  }
-}
-
-class _VisitListTab extends StatelessWidget {
-  final List<FieldVisit> visits;
-  final bool loading;
-  final VoidCallback onRefresh;
-  final Function(int, String) onUpdateStatus;
-
-  const _VisitListTab({
-    required this.visits,
-    required this.loading,
-    required this.onRefresh,
-    required this.onUpdateStatus,
-  });
-
-  static const _statusColors = {
-    'requested': Color(0xFF1565C0),
-    'confirmed': Color(0xFF2E7D32),
-    'rescheduled': Color(0xFFE65100),
-    'completed': AppColors.success,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
-    if (visits.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.event_available_outlined,
-                size: 64, color: AppColors.textHint),
-            const SizedBox(height: 12),
-            Text('No visit requests yet.',
-                style: AppTextStyles.body
-                    .copyWith(color: AppColors.textSecondary)),
-          ],
-        ),
+    final user = context.watch<AuthProvider>().user;
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: Text('Please log in')),
       );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: visits.length,
-      itemBuilder: (context, i) {
-        final v = visits[i];
-        final color = _statusColors[v.status] ?? AppColors.primary;
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(v.issueDescription,
-                          style: AppTextStyles.body
-                              .copyWith(fontWeight: FontWeight.w600),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: color.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(v.status.toUpperCase(),
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: color)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text('Preferred: ${v.preferredDate}',
-                    style: AppTextStyles.caption),
-                if (v.confirmedDate.isNotEmpty)
-                  Text('Confirmed: ${v.confirmedDate}',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.success)),
-                if (v.visitNotes.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(v.visitNotes,
-                        style: AppTextStyles.bodySmall),
-                  ),
+
+    final isMudhumeni = user.isMudhumeni || user.isAdmin;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Field Visit Scheduler'),
+        bottom: isMudhumeni
+            ? TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.white,
+                tabs: const [
+                  Tab(icon: Icon(Icons.notifications_active), text: 'Pending Requests'),
+                  Tab(icon: Icon(Icons.event_available), text: 'My Visits'),
+                  Tab(icon: Icon(Icons.calendar_month), text: 'All Visits'),
                 ],
-              ],
-            ),
+              )
+            : null,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadVisits,
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _ErrorView(error: _error!, onRetry: _loadVisits)
+              : isMudhumeni
+                  ? TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _PendingRequestsTab(
+                          visits: _pendingRequests,
+                          onRefresh: _loadVisits,
+                        ),
+                        _MyVisitsTab(
+                          visits: _myVisits,
+                          isMudhumeni: true,
+                          onRefresh: _loadVisits,
+                        ),
+                        _AllVisitsTab(
+                          visits: _allVisits,
+                          onRefresh: _loadVisits,
+                        ),
+                      ],
+                    )
+                  : _MyVisitsTab(
+                      visits: _myVisits,
+                      isMudhumeni: false,
+                      onRefresh: _loadVisits,
+                    ),
+      floatingActionButton: !isMudhumeni
+          ? FloatingActionButton.extended(
+              onPressed: () => _showRequestVisitDialog(context, user.userId, user.ward),
+              icon: const Icon(Icons.add),
+              label: const Text('Request Visit'),
+            )
+          : null,
+    );
+  }
+
+  Future<void> _showRequestVisitDialog(BuildContext context, String farmerId, String ward) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => _RequestVisitDialog(farmerId: farmerId, ward: ward),
+    );
+
+    if (result == true) {
+      _loadVisits();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Visit request submitted! Mudhumeni officer will respond soon.'),
+            backgroundColor: AppColors.success,
           ),
         );
-      },
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PENDING REQUESTS TAB (MUDHUMENI VIEW)
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _PendingRequestsTab extends StatelessWidget {
+  final List<FieldVisit> visits;
+  final VoidCallback onRefresh;
+
+  const _PendingRequestsTab({
+    required this.visits,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingVisits = visits.where((v) => v.status == 'pending').toList();
+
+    if (pendingVisits.isEmpty) {
+      return const _EmptyState(
+        icon: Icons.check_circle_outline,
+        title: 'No Pending Requests',
+        message: 'All visit requests have been addressed.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async => onRefresh(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: pendingVisits.length,
+        itemBuilder: (context, index) {
+          final visit = pendingVisits[index];
+          return _PendingVisitCard(
+            visit: visit,
+            onAction: onRefresh,
+          );
+        },
+      ),
     );
   }
 }
 
-class _RequestVisitTab extends StatefulWidget {
-  final String mudhumeniId;
-  final VoidCallback onRequested;
-  const _RequestVisitTab(
-      {required this.mudhumeniId, required this.onRequested});
+class _PendingVisitCard extends StatelessWidget {
+  final FieldVisit visit;
+  final VoidCallback onAction;
+
+  const _PendingVisitCard({
+    required this.visit,
+    required this.onAction,
+  });
 
   @override
-  State<_RequestVisitTab> createState() => _RequestVisitTabState();
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppColors.warning.withOpacity(0.3), width: 2),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    '🔔 NEW REQUEST',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  _formatDate(visit.requestedDate),
+                  style: AppTextStyles.caption,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              visit.farmerName,
+              style: AppTextStyles.heading3,
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.location_on, size: 16, color: AppColors.textHint),
+                const SizedBox(width: 4),
+                Text(
+                  'Ward ${visit.ward}',
+                  style: AppTextStyles.caption,
+                ),
+                const SizedBox(width: 12),
+                const Icon(Icons.phone, size: 16, color: AppColors.textHint),
+                const SizedBox(width: 4),
+                Text(
+                  visit.farmerPhone,
+                  style: AppTextStyles.caption,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Purpose:',
+                    style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(visit.purpose, style: AppTextStyles.body),
+                  if (visit.notes.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Additional Notes:',
+                      style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(visit.notes, style: AppTextStyles.bodySmall),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _handleReject(context, visit.id!),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('Decline'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.error),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _handleAccept(context, visit),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Accept'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAccept(BuildContext context, FieldVisit visit) async {
+    final result = await showDialog<DateTime>(
+      context: context,
+      builder: (context) => _ScheduleVisitDialog(visit: visit),
+    );
+
+    if (result != null) {
+      try {
+        final user = context.read<AuthProvider>().user!;
+        await MudhumeniDatabaseService.updateVisitStatus(
+          visit.id!,
+          'scheduled',
+          mudhumeniId: user.userId,
+          mudhumeniName: user.fullName,
+          scheduledDate: result,
+        );
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Visit scheduled successfully!'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          onAction();
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _handleReject(BuildContext context, int visitId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Decline Visit Request'),
+        content: const Text(
+          'Are you sure you want to decline this visit request? '
+          'The farmer will be notified.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Decline'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await MudhumeniDatabaseService.updateVisitStatus(visitId, 'cancelled');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Visit request declined'),
+              backgroundColor: AppColors.warning,
+            ),
+          );
+          onAction();
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${date.day}/${date.month}/${date.year}';
+  }
 }
 
-class _RequestVisitTabState extends State<_RequestVisitTab> {
-  final _issueCtrl = TextEditingController();
-  DateTime? _preferredDate;
-  bool _saving = false;
+// ══════════════════════════════════════════════════════════════════════════════
+// MY VISITS TAB
+// ══════════════════════════════════════════════════════════════════════════════
 
-  static const _green = Color(0xFF558B2F);
+class _MyVisitsTab extends StatelessWidget {
+  final List<FieldVisit> visits;
+  final bool isMudhumeni;
+  final VoidCallback onRefresh;
+
+  const _MyVisitsTab({
+    required this.visits,
+    required this.isMudhumeni,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (visits.isEmpty) {
+      return _EmptyState(
+        icon: Icons.event_note,
+        title: isMudhumeni ? 'No Assigned Visits' : 'No Visit Requests',
+        message: isMudhumeni
+            ? 'You have no scheduled visits yet.'
+            : 'You haven\'t requested any field visits yet.',
+      );
+    }
+
+    // Group by status
+    final scheduled = visits.where((v) => v.status == 'scheduled').toList();
+    final completed = visits.where((v) => v.status == 'completed').toList();
+    final cancelled = visits.where((v) => v.status == 'cancelled').toList();
+    final pending = visits.where((v) => v.status == 'pending').toList();
+
+    return RefreshIndicator(
+      onRefresh: () async => onRefresh(),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (pending.isNotEmpty) ...[
+            _SectionHeader(
+              icon: Icons.schedule,
+              title: 'Pending Response',
+              count: pending.length,
+              color: AppColors.warning,
+            ),
+            ...pending.map((v) => _VisitCard(
+                  visit: v,
+                  isMudhumeni: isMudhumeni,
+                  onRefresh: onRefresh,
+                )),
+            const SizedBox(height: 16),
+          ],
+          if (scheduled.isNotEmpty) ...[
+            _SectionHeader(
+              icon: Icons.event_available,
+              title: 'Scheduled',
+              count: scheduled.length,
+              color: AppColors.info,
+            ),
+            ...scheduled.map((v) => _VisitCard(
+                  visit: v,
+                  isMudhumeni: isMudhumeni,
+                  onRefresh: onRefresh,
+                )),
+            const SizedBox(height: 16),
+          ],
+          if (completed.isNotEmpty) ...[
+            _SectionHeader(
+              icon: Icons.check_circle,
+              title: 'Completed',
+              count: completed.length,
+              color: AppColors.success,
+            ),
+            ...completed.map((v) => _VisitCard(
+                  visit: v,
+                  isMudhumeni: isMudhumeni,
+                  onRefresh: onRefresh,
+                )),
+            const SizedBox(height: 16),
+          ],
+          if (cancelled.isNotEmpty) ...[
+            _SectionHeader(
+              icon: Icons.cancel,
+              title: 'Cancelled',
+              count: cancelled.length,
+              color: AppColors.error,
+            ),
+            ...cancelled.map((v) => _VisitCard(
+                  visit: v,
+                  isMudhumeni: isMudhumeni,
+                  onRefresh: onRefresh,
+                )),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final int count;
+  final Color color;
+
+  const _SectionHeader({
+    required this.icon,
+    required this.title,
+    required this.count,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Text(title, style: AppTextStyles.heading3),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$count',
+              style: AppTextStyles.caption.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VisitCard extends StatelessWidget {
+  final FieldVisit visit;
+  final bool isMudhumeni;
+  final VoidCallback onRefresh;
+
+  const _VisitCard({
+    required this.visit,
+    required this.isMudhumeni,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = _getStatusColor(visit.status);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withOpacity(0.1),
+          child: Icon(_getStatusIcon(visit.status), color: statusColor, size: 20),
+        ),
+        title: Text(
+          isMudhumeni ? visit.farmerName : visit.mudhumeniName ?? 'Pending assignment',
+          style: AppTextStyles.body,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(visit.purpose, style: AppTextStyles.caption),
+            if (visit.scheduledDate != null)
+              Text(
+                'Scheduled: ${_formatFullDate(visit.scheduledDate!)}',
+                style: AppTextStyles.caption.copyWith(color: AppColors.info),
+              )
+            else
+              Text(
+                'Requested: ${_formatFullDate(visit.requestedDate)}',
+                style: AppTextStyles.caption.copyWith(color: AppColors.textHint),
+              ),
+          ],
+        ),
+        trailing: visit.status == 'scheduled' && isMudhumeni
+            ? IconButton(
+                icon: const Icon(Icons.check_circle_outline, color: AppColors.success),
+                onPressed: () => _markComplete(context, visit.id!),
+                tooltip: 'Mark as complete',
+              )
+            : null,
+        onTap: () => _showVisitDetails(context, visit),
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return AppColors.warning;
+      case 'scheduled':
+        return AppColors.info;
+      case 'completed':
+        return AppColors.success;
+      case 'cancelled':
+        return AppColors.error;
+      default:
+        return AppColors.textHint;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'pending':
+        return Icons.schedule;
+      case 'scheduled':
+        return Icons.event_available;
+      case 'completed':
+        return Icons.check_circle;
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  String _formatFullDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _markComplete(BuildContext context, int visitId) async {
+    try {
+      await MudhumeniDatabaseService.updateVisitStatus(visitId, 'completed');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Visit marked as completed!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        onRefresh();
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
+  }
+
+  void _showVisitDetails(BuildContext context, FieldVisit visit) {
+    showDialog(
+      context: context,
+      builder: (context) => _VisitDetailsDialog(visit: visit),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ALL VISITS TAB (ADMIN VIEW)
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _AllVisitsTab extends StatelessWidget {
+  final List<FieldVisit> visits;
+  final VoidCallback onRefresh;
+
+  const _AllVisitsTab({
+    required this.visits,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (visits.isEmpty) {
+      return const _EmptyState(
+        icon: Icons.event_note,
+        title: 'No Visits',
+        message: 'No field visits in your ward yet.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async => onRefresh(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: visits.length,
+        itemBuilder: (context, index) {
+          final visit = visits[index];
+          return _VisitCard(
+            visit: visit,
+            isMudhumeni: true,
+            onRefresh: onRefresh,
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// REQUEST VISIT DIALOG (FARMER)
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _RequestVisitDialog extends StatefulWidget {
+  final String farmerId;
+  final String ward;
+
+  const _RequestVisitDialog({
+    required this.farmerId,
+    required this.ward,
+  });
+
+  @override
+  State<_RequestVisitDialog> createState() => _RequestVisitDialogState();
+}
+
+class _RequestVisitDialogState extends State<_RequestVisitDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _purposeController = TextEditingController();
+  final _notesController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
-    _issueCtrl.dispose();
+    _purposeController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now().add(const Duration(days: 3)),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 90)),
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Request Field Visit'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'A Mudhumeni officer in your ward will be notified of your request.',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _purposeController,
+                decoration: const InputDecoration(
+                  labelText: 'Purpose of Visit *',
+                  hintText: 'e.g., Crop disease inspection',
+                ),
+                maxLines: 2,
+                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _notesController,
+                decoration: const InputDecoration(
+                  labelText: 'Additional Notes (Optional)',
+                  hintText: 'Any specific details...',
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting ? null : _submit,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Submit Request'),
+        ),
+      ],
     );
-    if (d != null) setState(() => _preferredDate = d);
   }
 
   Future<void> _submit() async {
-    if (_issueCtrl.text.trim().isEmpty || _preferredDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields.')),
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final user = context.read<AuthProvider>().user!;
+      final visit = FieldVisit(
+        farmerId: user.userId,
+        farmerName: user.fullName,
+        farmerPhone: user.phone,
+        mudhumeniId: '',
+        ward: widget.ward,
+        purpose: _purposeController.text.trim(),
+        notes: _notesController.text.trim(),
+        requestedDate: DateTime.now(),
+        status: 'pending',
       );
-      return;
+
+      await MudhumeniDatabaseService.createFieldVisit(visit);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        setState(() => _isSubmitting = false);
+      }
     }
-    setState(() => _saving = true);
-    final user = context.read<AuthProvider>().user;
-    final visit = FieldVisit(
-      farmerId: user?.userId ?? '',
-      farmerName: user?.fullName ?? '',
-      mudhumeniId: widget.mudhumeniId,
-      ward: user?.district ?? '',
-      issueDescription: _issueCtrl.text.trim(),
-      preferredDate: DateFormat('dd MMM yyyy').format(_preferredDate!),
-      confirmedDate: '',
-      status: 'requested',
-      visitNotes: '',
-      createdAt: DateTime.now().toIso8601String(),
-    );
-    await MudhumeniDatabaseService.saveVisitRequest(visit);
-    setState(() => _saving = false);
-    widget.onRequested();
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SCHEDULE VISIT DIALOG (MUDHUMENI)
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _ScheduleVisitDialog extends StatefulWidget {
+  final FieldVisit visit;
+
+  const _ScheduleVisitDialog({required this.visit});
+
+  @override
+  State<_ScheduleVisitDialog> createState() => _ScheduleVisitDialogState();
+}
+
+class _ScheduleVisitDialogState extends State<_ScheduleVisitDialog> {
+  DateTime _selectedDate = DateTime.now();
+  TimeOfDay _selectedTime = TimeOfDay.now();
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+    return AlertDialog(
+      title: const Text('Schedule Visit'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.calendar_today, color: AppColors.primary),
+            title: const Text('Date'),
+            subtitle: Text(_formatDate(_selectedDate)),
+            onTap: _pickDate,
+          ),
+          ListTile(
+            leading: const Icon(Icons.access_time, color: AppColors.primary),
+            title: const Text('Time'),
+            subtitle: Text(_selectedTime.format(context)),
+            onTap: _pickTime,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final scheduledDateTime = DateTime(
+              _selectedDate.year,
+              _selectedDate.month,
+              _selectedDate.day,
+              _selectedTime.hour,
+              _selectedTime.minute,
+            );
+            Navigator.pop(context, scheduledDateTime);
+          },
+          child: const Text('Confirm Schedule'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 90)),
+    );
+    if (date != null) setState(() => _selectedDate = date);
+  }
+
+  Future<void> _pickTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+    );
+    if (time != null) setState(() => _selectedTime = time);
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VISIT DETAILS DIALOG
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _VisitDetailsDialog extends StatelessWidget {
+  final FieldVisit visit;
+
+  const _VisitDetailsDialog({required this.visit});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Visit Details'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _DetailRow(label: 'Farmer', value: visit.farmerName),
+            _DetailRow(label: 'Phone', value: visit.farmerPhone),
+            _DetailRow(label: 'Ward', value: visit.ward),
+            _DetailRow(label: 'Status', value: visit.status.toUpperCase()),
+            const Divider(height: 24),
+            _DetailRow(label: 'Purpose', value: visit.purpose),
+            if (visit.notes.isNotEmpty) _DetailRow(label: 'Notes', value: visit.notes),
+            const Divider(height: 24),
+            _DetailRow(
+              label: 'Requested',
+              value: _formatFullDate(visit.requestedDate),
+            ),
+            if (visit.scheduledDate != null)
+              _DetailRow(
+                label: 'Scheduled',
+                value: _formatFullDate(visit.scheduledDate!),
+              ),
+            if (visit.mudhumeniName != null)
+              _DetailRow(label: 'Assigned To', value: visit.mudhumeniName!),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  String _formatFullDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          FarmSectionHeader(
-            icon: Icons.event_available_outlined,
-            color: _green,
-            title: 'Request Farm Visit',
-            subtitle: 'Ask your AGRITEX Mudhumeni to visit your farm.',
+          Text(
+            label,
+            style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _issueCtrl,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: 'Describe the Issue *',
-              alignLabelWithHint: true,
-              hintText:
-                  'e.g. My maize crop is showing unusual symptoms...',
-              prefixIcon: Padding(
-                padding: EdgeInsets.only(bottom: 60),
-                child: Icon(Icons.description_outlined, color: _green),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: _pickDate,
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.divider),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.calendar_today_outlined, color: _green),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _preferredDate != null
-                          ? 'Preferred Date: ${DateFormat('dd MMM yyyy').format(_preferredDate!)}'
-                          : 'Select Preferred Date *',
-                      style: AppTextStyles.body.copyWith(
-                        color: _preferredDate != null
-                            ? AppColors.textPrimary
-                            : AppColors.textHint,
-                      ),
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, color: AppColors.textHint),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _saving ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _green,
-                minimumSize: const Size(double.infinity, 52),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              icon: _saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.send_outlined, color: Colors.white),
-              label: Text(_saving ? 'Requesting...' : 'Request Visit',
-                  style: AppTextStyles.button),
-            ),
-          ),
+          const SizedBox(height: 2),
+          Text(value, style: AppTextStyles.body),
         ],
       ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SEASONAL CALENDAR  —  /seasonal-calendar
-// ═══════════════════════════════════════════════════════════
-class SeasonalCalendarScreen extends StatefulWidget {
-  const SeasonalCalendarScreen({super.key});
+// ══════════════════════════════════════════════════════════════════════════════
+// SHARED WIDGETS
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
 
   @override
-  State<SeasonalCalendarScreen> createState() =>
-      _SeasonalCalendarScreenState();
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 64, color: AppColors.textHint),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: AppTextStyles.heading2.copyWith(color: AppColors.textPrimary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _SeasonalCalendarScreenState extends State<SeasonalCalendarScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabs;
-  List<SeasonalEntry> _entries = [];
-  bool _loading = true;
+class _ErrorView extends StatelessWidget {
+  final String error;
+  final VoidCallback onRetry;
 
-  static const _green = Color(0xFF558B2F);
-
-  String get _ward =>
-      context.read<AuthProvider>().user?.district ?? 'General';
+  const _ErrorView({required this.error, required this.onRetry});
 
   @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: 2, vsync: this);
-    _load();
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: AppColors.error),
+            const SizedBox(height: 16),
+            Text(
+              'Error',
+              style: AppTextStyles.heading2,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
+}
 
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
+// ══════════════════════════════════════════════════════════════════════════════
+// COMMUNITY & SEASONAL CALENDAR SCREENS (STUBS FOR NOW)
+// ══════════════════════════════════════════════════════════════════════════════
 
-  Future<void> _load() async {
-    final entries =
-        await MudhumeniDatabaseService.getCalendarByWard(_ward);
-    setState(() { _entries = entries; _loading = false; });
-  }
+class CommunityScreen extends StatelessWidget {
+  const CommunityScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Seasonal Crop Calendar')),
-      body: TabBarView(
-        controller: _tabs,
-        children: [
-          _CalendarTab(
-            entries: _entries,
-            loading: _loading,
-            onRefresh: _load,
-            onToggleDone: (id, done) async {
-              await MudhumeniDatabaseService.markEntryDone(id, done);
-              _load();
-            },
-            onDelete: (id) async {
-              await MudhumeniDatabaseService.deleteEntry(id);
-              _load();
-            },
-          ),
-          _AddEntryTab(
-            ward: _ward,
-            onAdded: () {
-              _load();
-              _tabs.animateTo(0);
-            },
-          ),
-        ],
-      ),
-      bottomNavigationBar: TabBar(
-        controller: _tabs,
-        labelColor: _green,
-        unselectedLabelColor: AppColors.textHint,
-        indicatorColor: _green,
-        tabs: const [
-          Tab(icon: Icon(Icons.calendar_view_month), text: 'Calendar'),
-          Tab(icon: Icon(Icons.add_circle_outline), text: 'Add Activity'),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Farmer Community')),
+      body: const Center(child: Text('Community posts coming soon...')),
     );
   }
 }
 
-class _CalendarTab extends StatelessWidget {
-  final List<SeasonalEntry> entries;
-  final bool loading;
-  final VoidCallback onRefresh;
-  final Function(int, bool) onToggleDone;
-  final Function(int) onDelete;
-
-  const _CalendarTab({
-    required this.entries,
-    required this.loading,
-    required this.onRefresh,
-    required this.onToggleDone,
-    required this.onDelete,
-  });
-
-  static const _actColors = {
-    'plant':     Color(0xFF2E7D32),
-    'fertilize': Color(0xFF1565C0),
-    'spray':     Color(0xFFE65100),
-    'harvest':   Color(0xFFF9A825),
-  };
-  static const _actIcons = {
-    'plant':     Icons.eco_outlined,
-    'fertilize': Icons.science_outlined,
-    'spray':     Icons.water_drop_outlined,
-    'harvest':   Icons.agriculture_outlined,
-  };
+class SeasonalCalendarScreen extends StatelessWidget {
+  const SeasonalCalendarScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
-    if (entries.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.calendar_today_outlined,
-                size: 64, color: AppColors.textHint),
-            const SizedBox(height: 12),
-            Text('No calendar entries yet.',
-                style: AppTextStyles.body
-                    .copyWith(color: AppColors.textSecondary)),
-          ],
-        ),
-      );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: entries.length,
-      itemBuilder: (context, i) {
-        final e = entries[i];
-        final color = _actColors[e.activityType] ?? AppColors.primary;
-        final icon = _actIcons[e.activityType] ?? Icons.event_outlined;
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color: e.isDone ? AppColors.background : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: e.isDone
-                    ? AppColors.divider
-                    : color.withOpacity(0.3)),
-          ),
-          child: ListTile(
-            leading: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color.withOpacity(e.isDone ? 0.05 : 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon,
-                  color: color.withOpacity(e.isDone ? 0.3 : 1.0),
-                  size: 22),
-            ),
-            title: Text(
-              '${e.cropType} — ${e.activityType.toUpperCase()}',
-              style: AppTextStyles.body.copyWith(
-                fontWeight: FontWeight.w600,
-                color: e.isDone
-                    ? AppColors.textHint
-                    : AppColors.textPrimary,
-                decoration:
-                    e.isDone ? TextDecoration.lineThrough : null,
-              ),
-            ),
-            subtitle: Text(
-              '${e.scheduledDate}${e.notes.isNotEmpty ? ' · ${e.notes}' : ''}',
-              style: AppTextStyles.caption,
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Checkbox(
-                  value: e.isDone,
-                  activeColor: AppColors.success,
-                  onChanged: (v) => onToggleDone(e.id!, v ?? false),
-                ),
-                GestureDetector(
-                  onTap: () => onDelete(e.id!),
-                  child: const Icon(Icons.delete_outline,
-                      color: AppColors.textHint, size: 18),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AddEntryTab extends StatefulWidget {
-  final String ward;
-  final VoidCallback onAdded;
-  const _AddEntryTab({required this.ward, required this.onAdded});
-
-  @override
-  State<_AddEntryTab> createState() => _AddEntryTabState();
-}
-
-class _AddEntryTabState extends State<_AddEntryTab> {
-  final _cropCtrl  = TextEditingController();
-  final _notesCtrl = TextEditingController();
-  String _activityType = 'plant';
-  DateTime? _date;
-  bool _saving = false;
-
-  static const _green = Color(0xFF558B2F);
-  static const _activities = [
-    ('plant',     'Plant',     Icons.eco_outlined),
-    ('fertilize', 'Fertilize', Icons.science_outlined),
-    ('spray',     'Spray',     Icons.water_drop_outlined),
-    ('harvest',   'Harvest',   Icons.agriculture_outlined),
-  ];
-
-  @override
-  void dispose() {
-    _cropCtrl.dispose();
-    _notesCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (d != null) setState(() => _date = d);
-  }
-
-  Future<void> _save() async {
-    if (_cropCtrl.text.trim().isEmpty || _date == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Crop type and date are required.')),
-      );
-      return;
-    }
-    setState(() => _saving = true);
-    final user = context.read<AuthProvider>().user;
-    final entry = SeasonalEntry(
-      mudhumeniId: user?.userId ?? '',
-      ward: widget.ward,
-      cropType: _cropCtrl.text.trim(),
-      activityType: _activityType,
-      scheduledDate: DateFormat('dd MMM yyyy').format(_date!),
-      notes: _notesCtrl.text.trim(),
-      isDone: false,
-      season: '2025/2026',
-      createdAt: DateTime.now().toIso8601String(),
-    );
-    await MudhumeniDatabaseService.saveSeasonalEntry(entry);
-    setState(() => _saving = false);
-    widget.onAdded();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _cropCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Crop Type *',
-              prefixIcon: Icon(Icons.eco_outlined, color: _green),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text('Activity Type', style: AppTextStyles.heading3),
-          const SizedBox(height: 10),
-          Row(
-            children: _activities.map((a) {
-              final sel = _activityType == a.$1;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () =>
-                        setState(() => _activityType = a.$1),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: sel ? _green : Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: sel ? _green : AppColors.divider),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(a.$3,
-                              color: sel
-                                  ? Colors.white
-                                  : AppColors.textHint,
-                              size: 20),
-                          const SizedBox(height: 3),
-                          Text(a.$2,
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  color: sel
-                                      ? Colors.white
-                                      : AppColors.textHint)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: _pickDate,
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.divider),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.calendar_today_outlined,
-                      color: _green),
-                  const SizedBox(width: 12),
-                  Text(
-                    _date != null
-                        ? 'Date: ${DateFormat('dd MMM yyyy').format(_date!)}'
-                        : 'Select Scheduled Date *',
-                    style: AppTextStyles.body.copyWith(
-                      color: _date != null
-                          ? AppColors.textPrimary
-                          : AppColors.textHint,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _notesCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Notes (Optional)',
-              prefixIcon:
-                  Icon(Icons.notes_outlined, color: _green),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _green,
-                minimumSize: const Size(double.infinity, 52),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              icon: _saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.add_circle_outline,
-                      color: Colors.white),
-              label: Text(
-                  _saving ? 'Saving...' : 'Add to Calendar',
-                  style: AppTextStyles.button),
-            ),
-          ),
-        ],
-      ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Seasonal Calendar')),
+      body: const Center(child: Text('Seasonal calendar coming soon...')),
     );
   }
 }

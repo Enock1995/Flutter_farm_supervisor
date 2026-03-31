@@ -1,5 +1,5 @@
 // lib/services/mudhumeni_database_service.dart
-// Developed by Sir Enocks — Cor Technologies
+// Developed by Sir Enocks Cor Technologies
 
 import '../models/mudhumeni_model.dart';
 import 'database_service.dart';
@@ -78,13 +78,15 @@ class MudhumeniDatabaseService {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         farmer_id TEXT NOT NULL,
         farmer_name TEXT NOT NULL,
-        mudhumeni_id TEXT NOT NULL,
+        farmer_phone TEXT NOT NULL DEFAULT '',
+        mudhumeni_id TEXT DEFAULT '',
+        mudhumeni_name TEXT DEFAULT '',
         ward TEXT NOT NULL,
-        issue_description TEXT NOT NULL,
-        preferred_date TEXT NOT NULL,
-        confirmed_date TEXT DEFAULT '',
-        status TEXT DEFAULT 'requested',
-        visit_notes TEXT DEFAULT '',
+        purpose TEXT NOT NULL,
+        notes TEXT DEFAULT '',
+        requested_date TEXT NOT NULL,
+        scheduled_date TEXT DEFAULT '',
+        status TEXT DEFAULT 'pending',
         created_at TEXT NOT NULL
       )
     ''');
@@ -155,7 +157,6 @@ class MudhumeniDatabaseService {
     return rows.map(MudhumeniProfile.fromMap).toList();
   }
 
-  /// Returns verified Mudhumeni profiles for a given ward.
   static Future<List<MudhumeniProfile>> getVerifiedMudhumeniByWard(
       String ward) async {
     final db = await DatabaseService().database;
@@ -222,7 +223,6 @@ class MudhumeniDatabaseService {
     return rows.map(QaQuestion.fromMap).toList();
   }
 
-  /// Returns all private questions sent TO a specific mudhumeni.
   static Future<List<QaQuestion>> getPrivateQuestionsForMudhumeni(
       String mudhumeniId) async {
     final db = await DatabaseService().database;
@@ -249,8 +249,6 @@ class MudhumeniDatabaseService {
     );
   }
 
-  /// Toggle upvote — one per user. Returns true if upvote added,
-  /// false if removed (toggled off).
   static Future<bool> toggleUpvote(int questionId, String userId) async {
     final db = await DatabaseService().database;
     final rows = await db.query('qa_questions',
@@ -269,7 +267,6 @@ class MudhumeniDatabaseService {
     final alreadyVoted = voters.contains(userId);
 
     if (alreadyVoted) {
-      // Remove vote
       voters.remove(userId);
       await db.update(
         'qa_questions',
@@ -282,7 +279,6 @@ class MudhumeniDatabaseService {
       );
       return false;
     } else {
-      // Add vote
       voters.add(userId);
       await db.update(
         'qa_questions',
@@ -297,15 +293,12 @@ class MudhumeniDatabaseService {
     }
   }
 
-  /// Legacy — kept for compatibility. Use toggleUpvote instead.
   static Future<void> upvoteQuestion(int id) async {
     final db = await DatabaseService().database;
     await db.rawUpdate(
         'UPDATE qa_questions SET upvotes = upvotes + 1 WHERE id = ?', [id]);
   }
 
-  /// Returns the set of question IDs that a given user has already upvoted.
-  /// Reads from the upvoted_by TEXT column on qa_questions (comma-separated).
   static Future<Set<int>> getUserUpvotedIds(String userId) async {
     if (userId.isEmpty) return {};
     try {
@@ -320,7 +313,6 @@ class MudhumeniDatabaseService {
       for (final row in rows) {
         final id = row['id'] as int?;
         final upvotedBy = row['upvoted_by'] as String? ?? '';
-        // Confirm exact match (LIKE can return partial matches)
         if (id != null &&
             upvotedBy.split(',').map((e) => e.trim()).contains(userId)) {
           result.add(id);
@@ -330,6 +322,22 @@ class MudhumeniDatabaseService {
     } catch (_) {
       return {};
     }
+  }
+
+  static Future<void> incrementQuestionUpvotes(int questionId) async {
+    final db = await DatabaseService().database;
+    await db.rawUpdate(
+      'UPDATE qa_questions SET upvotes = upvotes + 1 WHERE id = ?',
+      [questionId],
+    );
+  }
+
+  static Future<void> decrementQuestionUpvotes(int questionId) async {
+    final db = await DatabaseService().database;
+    await db.rawUpdate(
+      'UPDATE qa_questions SET upvotes = CASE WHEN upvotes > 0 THEN upvotes - 1 ELSE 0 END WHERE id = ?',
+      [questionId],
+    );
   }
 
   static Future<void> makePublic(int id) async {
@@ -373,13 +381,12 @@ class MudhumeniDatabaseService {
     return db.insert('field_visits', visit.toMap());
   }
 
-  static Future<List<FieldVisit>> getVisitsByMudhumeni(
-      String mudhumeniId) async {
+  static Future<List<FieldVisit>> getVisitsByMudhumeni(String mudhumeniId) async {
     final db = await DatabaseService().database;
     final rows = await db.query('field_visits',
         where: 'mudhumeni_id = ?',
         whereArgs: [mudhumeniId],
-        orderBy: 'preferred_date ASC');
+        orderBy: 'requested_date DESC');
     return rows.map(FieldVisit.fromMap).toList();
   }
 
@@ -392,18 +399,48 @@ class MudhumeniDatabaseService {
     return rows.map(FieldVisit.fromMap).toList();
   }
 
-  static Future<void> updateVisitStatus(int id, String status,
-      {String confirmedDate = '', String notes = ''}) async {
+  static Future<List<FieldVisit>> getPendingVisitsInWard(String ward) async {
     final db = await DatabaseService().database;
+    final rows = await db.query('field_visits',
+        where: 'ward = ? AND status = ?',
+        whereArgs: [ward, 'pending'],
+        orderBy: 'requested_date DESC');
+    return rows.map(FieldVisit.fromMap).toList();
+  }
+
+  static Future<List<FieldVisit>> getAllVisitsInWard(String ward) async {
+    final db = await DatabaseService().database;
+    final rows = await db.query('field_visits',
+        where: 'ward = ?',
+        whereArgs: [ward],
+        orderBy: 'requested_date DESC');
+    return rows.map(FieldVisit.fromMap).toList();
+  }
+
+  static Future<void> createFieldVisit(FieldVisit visit) async {
+    final db = await DatabaseService().database;
+    await db.insert('field_visits', visit.toMap());
+  }
+
+  static Future<void> updateVisitStatus(
+    int visitId,
+    String status, {
+    String? mudhumeniId,
+    String? mudhumeniName,
+    DateTime? scheduledDate,
+  }) async {
+    final db = await DatabaseService().database;
+    final data = <String, dynamic>{'status': status};
+    
+    if (mudhumeniId != null) data['mudhumeni_id'] = mudhumeniId;
+    if (mudhumeniName != null) data['mudhumeni_name'] = mudhumeniName;
+    if (scheduledDate != null) data['scheduled_date'] = scheduledDate.toIso8601String();
+    
     await db.update(
       'field_visits',
-      {
-        'status': status,
-        if (confirmedDate.isNotEmpty) 'confirmed_date': confirmedDate,
-        if (notes.isNotEmpty) 'visit_notes': notes,
-      },
+      data,
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [visitId],
     );
   }
 
@@ -460,5 +497,24 @@ class MudhumeniDatabaseService {
     final db = await DatabaseService().database;
     await db.update('problem_reports', {'is_resolved': 1},
         where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ── ACTIVITY STATS (FOR AREA MANAGEMENT) ──────────────
+  static Future<List<QaQuestion>> getQuestionsByUser(String userId) async {
+    final db = await DatabaseService().database;
+    final rows = await db.query('qa_questions',
+        where: 'author_id = ?',
+        whereArgs: [userId],
+        orderBy: 'created_at DESC');
+    return rows.map(QaQuestion.fromMap).toList();
+  }
+
+  static Future<List<CommunityPost>> getCommunityPostsByUser(String userId) async {
+    final db = await DatabaseService().database;
+    final rows = await db.query('community_posts',
+        where: 'author_id = ?',
+        whereArgs: [userId],
+        orderBy: 'created_at DESC');
+    return rows.map(CommunityPost.fromMap).toList();
   }
 }

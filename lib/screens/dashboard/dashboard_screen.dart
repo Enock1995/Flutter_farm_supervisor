@@ -1,5 +1,5 @@
 // lib/screens/dashboard/dashboard_screen.dart
-// Developed by Sir Enocks — Cor Technologies
+// Developed by Sir Enocks Cor Technologies
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -129,21 +129,12 @@ class _DashboardScreenState
                   const SizedBox(height: 24),
 
                   _PremiumSectionHeader(
-                    icon: '📊',
-                    title: 'Analytics & Reporting',
-                    subtitle: 'Advanced insights and automated reports',
+                    icon: '🩺',
+                    title: 'Veterinary Services',
+                    subtitle: 'Connect with animal health experts',
                   ),
                   const SizedBox(height: 12),
-                  _PremiumModuleGrid(modules: _analyticsModules),
-                  const SizedBox(height: 24),
-
-                  _PremiumSectionHeader(
-                    icon: '👷',
-                    title: 'Remote Farm Management',
-                    subtitle: 'Manage workers and farms from anywhere',
-                  ),
-                  const SizedBox(height: 12),
-                  _PremiumModuleGrid(modules: _farmManagementModules),
+                  _PremiumModuleGrid(modules: _vetModules),
                   const SizedBox(height: 24),
 
                   _PremiumSectionHeader(
@@ -201,99 +192,41 @@ final _aiModules = [
   ),
 ];
 
-final _analyticsModules = [
+// ── Veterinary Services modules ──────────────────────────
+final _vetModules = [
   _Module(
-    icon: Icons.bar_chart_outlined,
-    label: 'Advanced\nAnalytics',
-    color: const Color(0xFF1565C0),
-    route: '/analytics',
-    isBuilt: true,
-  ),
-  _Module(
-    icon: Icons.summarize_outlined,
-    label: 'Auto PDF/Excel\nReports',
-    color: const Color(0xFF1565C0),
-    route: '/auto-reports',
-    isBuilt: true,
-  ),
-  _Module(
-    icon: Icons.corporate_fare_outlined,
-    label: 'Multi-Farm\nManagement',
-    color: const Color(0xFF1565C0),
-    route: '/multi-farm',
-    isBuilt: true,
-  ),
-];
-
-final _farmManagementModules = [
-  _Module(
-    icon: Icons.add_location_alt_outlined,
-    label: 'Farm\nRegistration',
+    icon: Icons.medical_services_outlined,
+    label: 'Vet\nNetwork',
     color: const Color(0xFF2E7D32),
-    route: '/farm-registration',
+    route: '/vet-network',
     isBuilt: true,
   ),
   _Module(
-    icon: Icons.group_add_outlined,
-    label: 'Worker\nOnboarding',
+    icon: Icons.app_registration_outlined,
+    label: 'Vet\nRegistration',
     color: const Color(0xFF2E7D32),
-    route: '/worker-onboarding',
+    route: '/vet-registration',
     isBuilt: true,
   ),
   _Module(
-    icon: Icons.location_on_outlined,
-    label: 'GPS\nClock-In/Out',
+    icon: Icons.dashboard_outlined,
+    label: 'Vet\nDashboard',
     color: const Color(0xFF2E7D32),
-    route: '/gps-clockin',
+    route: '/vet-dashboard',
     isBuilt: true,
   ),
   _Module(
-    icon: Icons.assignment_outlined,
-    label: 'Remote Task\nAssignment',
+    icon: Icons.article_outlined,
+    label: 'Knowledge\nPosts',
     color: const Color(0xFF2E7D32),
-    route: '/task-assignment',
+    route: '/vet-knowledge',
     isBuilt: true,
   ),
   _Module(
-    icon: Icons.dynamic_feed_outlined,
-    label: 'Farm Activity\nFeed',
+    icon: Icons.question_answer_outlined,
+    label: 'Vet\nQ&A',
     color: const Color(0xFF2E7D32),
-    route: '/activity-feed',
-    isBuilt: true,
-  ),
-  _Module(
-    icon: Icons.payments_outlined,
-    label: 'Payroll &\nEcoCash Payout',
-    color: const Color(0xFF2E7D32),
-    route: '/payroll',
-    isBuilt: true,
-  ),
-  _Module(
-    icon: Icons.leaderboard_outlined,
-    label: 'Worker\nPerformance',
-    color: const Color(0xFF2E7D32),
-    route: '/worker-performance',
-    isBuilt: true,
-  ),
-  _Module(
-    icon: Icons.edit_note_outlined,
-    label: 'Daily Field\nReports',
-    color: const Color(0xFF2E7D32),
-    route: '/field-reports',
-    isBuilt: true,
-  ),
-  _Module(
-    icon: Icons.photo_library_outlined,
-    label: 'Farm\nPhoto Diary',
-    color: const Color(0xFF2E7D32),
-    route: '/photo-diary',
-    isBuilt: true,
-  ),
-  _Module(
-    icon: Icons.sos_outlined,
-    label: 'Emergency\nSOS Alert',
-    color: const Color(0xFFC62828),
-    route: '/sos-alert',
+    route: '/vet-qa',
     isBuilt: true,
   ),
 ];

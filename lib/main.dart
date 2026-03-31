@@ -73,6 +73,12 @@ import 'screens/mudhumeni/qa_screens.dart';
 import 'screens/mudhumeni/community_fieldvisits_screens.dart';
 import 'screens/mudhumeni/problem_heatmap_screen.dart';
 import 'screens/mudhumeni/area_management_screen.dart';
+// ── Vet imports ──────────────────────────────────────────
+import 'screens/vet/vet_registration_screen.dart';
+import 'screens/vet/farmer_vet_network_screen.dart';
+import 'screens/vet/vet_dashboard_screen.dart';
+import 'screens/vet/vet_knowledge_posts_screen.dart';
+import 'screens/vet/vet_qa_screens.dart';
 // ── Admin ────────────────────────────────────────────────
 import 'screens/admin/admin_panel_screen.dart';
 import 'screens/debug/debug_screen.dart';
@@ -189,6 +195,13 @@ class AgricAssistApp extends StatelessWidget {
           '/field-visits':           (context) => const _PremiumGate(child: FieldVisitsScreen()),
           '/seasonal-calendar':      (context) => const _PremiumGate(child: SeasonalCalendarScreen()),
           '/problem-heatmap':        (context) => const _PremiumGate(child: ProblemHeatmapScreen()),
+
+          // ── Veterinary Services ───────────────────────
+          '/vet-registration':      (context) => const _PremiumGate(child: VetRegistrationScreen()),
+          '/vet-network':           (context) => const _PremiumGate(child: FarmerVetNetworkScreen()),
+          '/vet-dashboard':         (context) => const _PremiumGate(child: VetDashboardScreen()),
+          '/vet-knowledge':         (context) => const _PremiumGate(child: VetKnowledgePostsScreen()),
+          '/vet-qa':                (context) => const _PremiumGate(child: VetQaScreens()),
 
           // ── Admin panel (hierarchy-aware) ─────────────
           '/admin-panel':            (context) => _AdminGate(child: AdminPanelScreen()),

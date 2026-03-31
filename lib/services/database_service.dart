@@ -16,6 +16,7 @@ import 'task_activity_database_service.dart';
 import 'payroll_fieldreport_database_service.dart';
 import 'sos_database_service.dart';
 import 'mudhumeni_database_service.dart';
+import 'vet_database_service.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -40,7 +41,7 @@ class DatabaseService {
     final String dbPath = await _resolveDbPath();
     return await openDatabase(
       dbPath,
-      version: 11,                   // ← bumped to 11
+      version: 12,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -250,7 +251,6 @@ class DatabaseService {
       )
     ''');
 
-    // ── v11: Role notifications ─────────────────────────
     await db.execute('''
       CREATE TABLE IF NOT EXISTS role_notifications (
         id TEXT PRIMARY KEY,
@@ -269,6 +269,7 @@ class DatabaseService {
     await PayrollFieldReportDatabaseService.createTables(db);
     await SosDatabaseService.createTables(db);
     await MudhumeniDatabaseService.createTables(db);
+    await VetDatabaseService.createTables(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -321,7 +322,6 @@ class DatabaseService {
       ''');
     }
     if (oldVersion < 11) {
-      // Role notifications table for demotion/removal alerts
       await db.execute('''
         CREATE TABLE IF NOT EXISTS role_notifications (
           id TEXT PRIMARY KEY,
@@ -335,6 +335,9 @@ class DatabaseService {
           is_read INTEGER NOT NULL DEFAULT 0
         )
       ''');
+    }
+    if (oldVersion < 12) {
+      await VetDatabaseService.createTables(db);
     }
   }
 
@@ -423,7 +426,6 @@ class DatabaseService {
 
   // ── ROLE MANAGEMENT ───────────────────────────────────────────────────────
 
-  /// Update a user's role in the DB
   Future<void> updateUserRole(String userId, String newRole) async {
     final db = await database;
     await db.update(
@@ -434,8 +436,6 @@ class DatabaseService {
     );
   }
 
-  /// Hard-delete a user and all their data.
-  /// Farmers' ward links remain — they just have no mudhumeni until reassigned.
   Future<void> deleteUser(String userId) async {
     final db = await database;
     for (final table in [
@@ -452,7 +452,6 @@ class DatabaseService {
 
   // ── HIERARCHY QUERIES ─────────────────────────────────────────────────────
 
-  /// Get all users with a specific role (optional area filter)
   Future<List<UserModel>> getUsersByRole(
     String role, {
     String? province,
@@ -483,12 +482,10 @@ class DatabaseService {
     return maps.map(UserModel.fromMap).toList();
   }
 
-  /// Get farmers in a specific ward
   Future<List<UserModel>> getFarmersByWard(String ward) async {
     return getUsersByRole('farmer', ward: ward);
   }
 
-  /// Get all users visible to a given authority based on their area
   Future<List<UserModel>> getUsersUnderAuthority(UserModel authority) async {
     final db = await database;
     String where;
@@ -496,7 +493,6 @@ class DatabaseService {
 
     switch (authority.normalizedRole) {
       case 'national_admin':
-        // Sees everyone except themselves
         where = 'user_id != ?';
         args.add(authority.userId);
         break;
@@ -509,7 +505,6 @@ class DatabaseService {
         args.addAll([authority.district, authority.userId]);
         break;
       case 'mudhumeni':
-        // Mudhumeni only sees farmers in their ward
         where = 'ward = ? AND role = ? AND user_id != ?';
         args.addAll([authority.ward, 'farmer', authority.userId]);
         break;
@@ -528,7 +523,6 @@ class DatabaseService {
 
   // ── ROLE NOTIFICATIONS ────────────────────────────────────────────────────
 
-  /// Insert a demotion/removal notification for a user
   Future<void> insertRoleNotification(RoleNotification notification) async {
     final db = await database;
     await db.insert(
@@ -538,7 +532,6 @@ class DatabaseService {
     );
   }
 
-  /// Get unread notifications for a user
   Future<List<RoleNotification>> getUnreadNotifications(String userId) async {
     final db = await database;
     final maps = await db.query(
@@ -550,7 +543,6 @@ class DatabaseService {
     return maps.map(RoleNotification.fromMap).toList();
   }
 
-  /// Mark all notifications as read for a user
   Future<void> markNotificationsRead(String userId) async {
     final db = await database;
     await db.update(
@@ -561,7 +553,42 @@ class DatabaseService {
     );
   }
 
-  // ── EXISTING OPERATIONS — unchanged ──────────────────────────────────────
+  // ── UPVOTE MANAGEMENT ─────────────────────────────────────────────────────
+
+  Future<bool> hasUserUpvoted(String userId, int questionId) async {
+    final db = await database;
+    final result = await db.query(
+      'qa_upvotes',
+      where: 'user_id = ? AND question_id = ?',
+      whereArgs: [userId, questionId],
+      limit: 1,
+    );
+    return result.isNotEmpty;
+  }
+
+  Future<void> addUpvote(String userId, int questionId) async {
+    final db = await database;
+    await db.insert(
+      'qa_upvotes',
+      {
+        'user_id': userId,
+        'question_id': questionId,
+        'created_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<void> removeUpvote(String userId, int questionId) async {
+    final db = await database;
+    await db.delete(
+      'qa_upvotes',
+      where: 'user_id = ? AND question_id = ?',
+      whereArgs: [userId, questionId],
+    );
+  }
+
+  // ── EXISTING OPERATIONS ──────────────────────────────────────────────────
 
   Future<int> getNextUserNumber(String districtCode) async {
     final db = await database;
